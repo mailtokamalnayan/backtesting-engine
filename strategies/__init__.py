@@ -12,7 +12,7 @@ populates the registry.
 from collections import namedtuple
 from dataclasses import dataclass, field
 
-Registered = namedtuple("Registered", ["cls", "spec"])
+Registered = namedtuple("Registered", ["cls", "spec", "trade_on_close"])
 
 
 @dataclass
@@ -32,8 +32,15 @@ class ParamSpec:
 STRATEGIES = {}
 
 
-def register(name, cls, spec: ParamSpec):
-    STRATEGIES[name] = Registered(cls, spec)
+def register(name, cls, spec: ParamSpec, trade_on_close=False):
+    """Register a strategy.
+
+    ``trade_on_close`` is a property of the strategy's logic, not a free runner
+    knob: signal-on-close strategies (e.g. "buy at this close") set it True so
+    fills happen on the signal bar's close rather than the next bar's open. Because
+    it's fixed per strategy, it doesn't widen a run's identity.
+    """
+    STRATEGIES[name] = Registered(cls, spec, trade_on_close)
 
 
 def get(name) -> Registered:
@@ -51,3 +58,4 @@ def available():
 # Importing example modules triggers their self-registration. Kept at the bottom
 # so `register`/`ParamSpec` are defined before the modules import them.
 from . import ema_cross  # noqa: E402,F401
+from . import turnaround_tuesday  # noqa: E402,F401

@@ -5,9 +5,10 @@ and fill mode and a configurable per-side commission, then saves the run. ``cash
 and fill mode are constants (not user knobs), which keeps a run's identity to exactly
 strategy + params + instrument + date range + commission.
 
-Fills are next-bar open (``trade_on_close=False``): a signal on today's close fills at
-tomorrow's open — the realistic assumption for an end-of-day daily strategy. Note the
-spot index is not directly tradeable; see README's methodological caveats.
+Fill mode is declared per strategy (``Registered.trade_on_close``): most strategies
+fill at the next bar's open (realistic for an EOD signal), while signal-on-close
+strategies fill on the signal bar's close. Note the spot index is not directly
+tradeable; see README's methodological caveats.
 """
 
 import config
@@ -75,7 +76,7 @@ def run_backtest(
         entry.cls,
         cash=config.DEFAULT_CASH,
         commission=commission,
-        trade_on_close=False,
+        trade_on_close=entry.trade_on_close,  # strategy declares its fill mode
         exclusive_orders=True,
         finalize_trades=True,
     )
