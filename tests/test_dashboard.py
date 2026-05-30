@@ -126,6 +126,32 @@ def test_build_trades_table_empty_returns_columns():
     assert len(out) == 0
 
 
+def test_build_oos_table_formats_both_segments():
+    split = {
+        "split_date": "2022-01-01", "fraction": 0.7,
+        "in_sample": {"trades": 162, "total_pnl": 300000.0, "avg_pnl": 1851.0,
+                      "win_rate": 56.5, "profit_factor": 1.8},
+        "out_sample": {"trades": 70, "total_pnl": 128000.0, "avg_pnl": 1828.0,
+                       "win_rate": 55.0, "profit_factor": 1.7},
+    }
+    table = dashboard.build_oos_table(split)
+    assert list(table.columns) == ["Metric", "In-Sample", "Out-of-Sample"]
+    vals = dict(zip(table["Metric"], table["Out-of-Sample"]))
+    assert vals["Trades"] == "70"
+    assert vals["Total PnL"] == "128,000"
+    assert vals["Win Rate"] == "55.00%"
+    assert vals["Profit Factor"] == "1.70"
+
+
+def test_build_oos_table_handles_empty_segment():
+    split = {"in_sample": {"trades": 0, "total_pnl": 0.0, "avg_pnl": None,
+                           "win_rate": None, "profit_factor": None},
+             "out_sample": {}}
+    table = dashboard.build_oos_table(split)
+    assert table.iloc[0]["In-Sample"] == "0"
+    assert table.iloc[2]["In-Sample"] == "—"  # avg_pnl None
+
+
 def test_build_metrics_table_curates_and_formats():
     metrics = {
         "Start": "2022-01-03", "End": "2024-12-31",

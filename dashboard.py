@@ -117,6 +117,26 @@ def build_metrics_table(metrics: dict) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["Metric", "Value"])
 
 
+def build_oos_table(split: dict) -> pd.DataFrame:
+    """In-sample vs out-of-sample comparison from a run's split summary."""
+    def col(seg):
+        seg = seg or {}
+        return [
+            _fmt_int(seg.get("trades")),
+            _fmt_money(seg.get("total_pnl")),
+            _fmt_money(seg.get("avg_pnl")),
+            _fmt_pct(seg.get("win_rate")),
+            _fmt_num(seg.get("profit_factor")),
+        ]
+
+    return pd.DataFrame({
+        "Metric": ["Trades", "Total PnL", "Avg PnL/trade", "Win Rate",
+                   "Profit Factor"],
+        "In-Sample": col(split.get("in_sample")),
+        "Out-of-Sample": col(split.get("out_sample")),
+    })
+
+
 def equity_return_curve(series: pd.Series, max_points=2000) -> pd.Series:
     """Equity as % return from the start (begins at 0), downsampled for charting."""
     base = series.iloc[0]
@@ -230,6 +250,19 @@ if __name__ == "__main__":
             else:
                 st.subheader("Metrics")
                 st.table(build_metrics_table(artifacts["metrics"]))
+
+                split_json = row.get("split_json")
+                if isinstance(split_json, str) and split_json:
+                    split = json.loads(split_json)
+                    st.subheader("Out-of-sample validation")
+                    st.caption(
+                        f"Split at {split['split_date']} — in-sample is the first "
+                        f"{split['fraction'] * 100:.0f}% of the range; out-of-sample "
+                        f"is the most-recent {(1 - split['fraction']) * 100:.0f}% "
+                        f"(unseen). An edge that holds here is far more trustworthy."
+                    )
+                    st.table(build_oos_table(split))
+
                 st.subheader("Equity curve (% return from start)")
                 st.line_chart(equity_return_curve(artifacts["equity"]["Equity"]))
                 st.subheader("Trades")

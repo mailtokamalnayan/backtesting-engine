@@ -22,6 +22,7 @@ import uuid
 import pandas as pd
 
 import config
+from engine import oos
 
 # stats keys we denormalize into columns -> (column name, python type)
 _HOT_METRICS = {
@@ -53,7 +54,8 @@ CREATE TABLE IF NOT EXISTS runs (
     sharpe       REAL,
     num_trades   INTEGER,
     final_equity REAL,
-    stats_json   TEXT NOT NULL
+    stats_json   TEXT NOT NULL,
+    split_json   TEXT
 )
 """
 
@@ -63,9 +65,13 @@ def _connect():
 
 
 def init_db():
-    """Create the runs table if absent. Idempotent; safe to call on every op."""
+    """Create the runs table if absent and apply column migrations. Idempotent."""
     with _connect() as conn:
         conn.execute(_SCHEMA)
+        # Lightweight forward-migration for DBs created before a column existed.
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(runs)")}
+        if "split_json" not in existing:
+            conn.execute("ALTER TABLE runs ADD COLUMN split_json TEXT")
 
 
 def config_hash(strategy, params, instrument, start, end, slippage) -> str:
@@ -158,6 +164,9 @@ def save_run(
         "created_at": now.isoformat(),
         "artifact_dir": artifact_rel,
         "stats_json": json.dumps(stats_dict, default=str),
+        "split_json": json.dumps(
+            oos.split_summary(trades_df, start, end, config.DEFAULT_OOS_SPLIT)
+        ),
         **_hot_values(stats),
     }
     cols = ", ".join(row)

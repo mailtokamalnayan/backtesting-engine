@@ -43,3 +43,8 @@ DEFAULT_CASH = 10_000_000
 # not modeled separately. 0.05% is a realistic Nifty-futures execution cost;
 # change this one constant to tune.
 DEFAULT_SLIPPAGE = 0.0005
+
+# Out-of-sample split: fraction of the date range used as in-sample (train); the
+# remaining, most-recent fraction is out-of-sample (validation). Every run is split
+# automatically so you can see whether an edge holds on unseen data.
+DEFAULT_OOS_SPLIT = 0.7
