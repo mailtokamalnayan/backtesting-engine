@@ -1,10 +1,11 @@
-"""U7: dashboard pure helpers (Streamlit shell verified manually)."""
+"""Dashboard pure helpers (Streamlit shell verified manually)."""
 
 import datetime as dt
 
 import pandas as pd
 import pytest
 
+import config
 import dashboard
 from data.source import DataSource
 from engine.runner import run_backtest
@@ -14,49 +15,72 @@ pytestmark = pytest.mark.usefixtures("isolated_store")
 
 def _runs_frame():
     return pd.DataFrame([
-        {"run_id": "b", "strategy": "ema_cross", "instrument": "nifty",
-         "params_json": '{"n1": 10, "n2": 30}', "start_date": "2022-01-01",
-         "end_date": "2026-05-30", "cagr": 11.8, "return_pct": 30.0,
-         "max_drawdown": -22.0, "win_rate": 50.0, "sharpe": 1.05, "num_trades": 8,
+        {"run_id": "b", "strategy": "turnaround_tuesday_intraday",
+         "instrument": "nifty", "params_json": '{"n": 9, "lot": 65, "hold_days": 2}',
+         "start_date": "2015-01-01", "end_date": "2026-05-30",
+         "cagr": 0.31, "return_pct": 2.4, "max_drawdown": -1.2, "win_rate": 56.5,
+         "sharpe": 0.15, "num_trades": 232, "final_equity": 10_428_474.0,
+         "stats_json": '{"Profit Factor": 1.76, "CAGR [%]": 0.31, "# Trades": 232}',
+         "split_json": '{"out_sample": {"profit_factor": 1.05}}',
          "created_at": "2026-05-30T10:01:00"},
-        {"run_id": "a", "strategy": "ema_cross", "instrument": "banknifty",
-         "params_json": '{"n1": 20, "n2": 50}', "start_date": "2020-01-01",
-         "end_date": "2024-12-31", "cagr": 14.2, "return_pct": 42.0,
-         "max_drawdown": -18.0, "win_rate": 55.0, "sharpe": 1.23, "num_trades": 5,
+        {"run_id": "a", "strategy": "turnaround_tuesday_intraday",
+         "instrument": "nifty", "params_json": '{"n": 50, "lot": 65, "hold_days": 2}',
+         "start_date": "2015-01-01", "end_date": "2026-05-30",
+         "cagr": 0.30, "return_pct": 2.0, "max_drawdown": -0.6, "win_rate": 56.8,
+         "sharpe": 0.20, "num_trades": 190, "final_equity": 10_420_171.0,
+         "stats_json": '{"Profit Factor": 1.58, "CAGR [%]": 0.30, "# Trades": 190}',
+         "split_json": '{"out_sample": {"profit_factor": 1.79}}',
          "created_at": "2026-05-30T10:00:00"},
     ])
 
 
-def test_build_table_formats_and_preserves_order():
-    table = dashboard.build_table(_runs_frame())
-    assert list(table.columns) == dashboard.TABLE_COLUMNS
-    assert table.iloc[0]["Run ID"] == "b"  # input order preserved
-    assert table.iloc[0]["CAGR"] == "11.80%"
-    assert table.iloc[1]["Max DD"] == "-18.00%"   # negative drawdown shown as-is
-    assert table.iloc[1]["Sharpe"] == "1.23"
-    assert table.iloc[0]["Params"] == "n1=10,n2=30"
-    assert table.iloc[0]["Period"] == "2022-01-01 → 2026-05-30"
-    assert table.iloc[1]["# Trades"] == 5
+def test_run_label_skips_lot():
+    assert dashboard.run_label('{"n": 9, "lot": 65, "hold_days": 2}') == "n=9, hold_days=2"
+    assert dashboard.run_label('{}') == "default"
 
 
-def test_build_table_empty_returns_columns_no_crash():
-    table = dashboard.build_table(pd.DataFrame())
-    assert list(table.columns) == dashboard.TABLE_COLUMNS
-    assert len(table) == 0
+def test_build_runs_table_breaks_params_into_columns():
+    table = dashboard.build_runs_table(_runs_frame())
+    # Param keys become their own columns.
+    for col in ("n", "lot", "hold_days", "CAGR", "Total PnL", "PF", "OOS PF"):
+        assert col in table.columns
+    first = table.iloc[0]
+    assert first["n"] == 9
+    assert first["CAGR"] == "0.31%"
+    assert first["PF"] == "1.76"          # from stats_json
+    assert first["OOS PF"] == "1.05"      # from split_json
+    assert first["Total PnL"] == "428,474"  # final_equity - 10M cash base
+    assert first["Trades"] == "232"
 
 
-def test_filter_runs_by_strategy_and_instrument():
+def test_build_runs_table_empty():
+    assert dashboard.build_runs_table(pd.DataFrame()).empty
+
+
+def test_build_comparison_table_side_by_side():
     runs = _runs_frame()
-    assert len(dashboard.filter_runs(runs, instrument="nifty")) == 1
-    assert len(dashboard.filter_runs(runs, strategy="All", instrument="All")) == 2
-    assert len(dashboard.filter_runs(runs, strategy="ema_cross")) == 2
+    table = dashboard.build_comparison_table(runs, ["b", "a"])
+    assert table.columns[0] == "Metric"
+    # Each run is a column, labelled by its varying params.
+    assert "n=9, hold_days=2" in table.columns
+    assert "n=50, hold_days=2" in table.columns
+    # Full stat set surfaced, including CAGR and Profit Factor.
+    metrics = list(table["Metric"])
+    assert "CAGR [%]" in metrics and "Profit Factor" in metrics
+    pf_row = table[table["Metric"] == "Profit Factor"].iloc[0]
+    assert pf_row["n=9, hold_days=2"] == "1.76"
 
 
-def test_nan_metric_renders_dash():
-    runs = _runs_frame()
-    runs.loc[0, "sharpe"] = float("nan")
-    table = dashboard.build_table(runs)
-    assert table.iloc[0]["Sharpe"] == "—"
+def test_build_comparison_table_dedupes_labels():
+    runs = pd.DataFrame([
+        {"run_id": "x", "params_json": '{"n": 9, "lot": 65}',
+         "stats_json": '{"Profit Factor": 1.5}'},
+        {"run_id": "y", "params_json": '{"n": 9, "lot": 65}',
+         "stats_json": '{"Profit Factor": 1.6}'},
+    ])
+    table = dashboard.build_comparison_table(runs, ["x", "y"])
+    assert "n=9" in table.columns
+    assert "n=9 (#2)" in table.columns  # second identical label disambiguated
 
 
 def test_load_equity_series_roundtrip(synthetic_ohlc):
@@ -111,8 +135,7 @@ def test_build_trades_table_formats_sorts_latest_first():
     })
     table = dashboard.build_trades_table(trades)
     assert list(table.columns) == dashboard.TRADE_COLUMNS
-    # Latest entry first (Feb 12 before Feb 05).
-    assert "Feb 12" in table.iloc[0]["Entry"]
+    assert "Feb 12" in table.iloc[0]["Entry"]   # latest entry first
     assert table.iloc[0]["Entry"].endswith("03:25pm")
     assert table.iloc[0]["Exit"].endswith("09:45am")
     assert table.iloc[0]["Duration"] == "18h 20m"
@@ -150,21 +173,3 @@ def test_build_oos_table_handles_empty_segment():
     table = dashboard.build_oos_table(split)
     assert table.iloc[0]["In-Sample"] == "0"
     assert table.iloc[2]["In-Sample"] == "—"  # avg_pnl None
-
-
-def test_build_metrics_table_curates_and_formats():
-    metrics = {
-        "Start": "2022-01-03", "End": "2024-12-31",
-        "Return [%]": 16.1567, "CAGR [%]": 3.5166, "Max. Drawdown [%]": -14.142,
-        "Sharpe Ratio": 0.365, "# Trades": 31, "Equity Final [$]": 11615655.37,
-        "_strategy": "ignored",
-    }
-    table = dashboard.build_metrics_table(metrics)
-    assert list(table.columns) == ["Metric", "Value"]
-    vals = dict(zip(table["Metric"], table["Value"]))
-    assert vals["Return"] == "16.16%"
-    assert vals["Max Drawdown"] == "-14.14%"
-    assert vals["Sharpe"] == "0.36"
-    assert vals["Trades"] == "31"  # label has no leading '#' (would render as markdown H1)
-    assert vals["Final Equity"] == "11,615,655"
-    assert "ignored" not in table["Value"].values  # non-curated keys dropped

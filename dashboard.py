@@ -2,78 +2,21 @@
 
     python -m streamlit run dashboard.py
 
-Logic lives in small pure helpers (unit-tested); the Streamlit shell at the bottom
-only wires them to widgets. The runs table is the comparison surface (one row per
-run/variation). The detail view shows one run at a time — equity curve, metrics,
-trades. Cross-run equity-curve overlay is deferred (see plan Scope Boundaries).
+Runs are clustered by strategy. Within a strategy, each run's params are broken into
+their own columns so variations are easy to compare, and you can multi-select runs to
+see their full backtesting.py stats side by side and their equity curves overlaid.
+Logic lives in small pure helpers (unit-tested); the Streamlit shell only wires them.
 """
 
 import json
 
 import pandas as pd
 
+import config
 from engine import persistence
 
-# Display column order for the runs table.
-TABLE_COLUMNS = [
-    "Run ID", "Strategy", "Instrument", "Params", "Period", "CAGR", "Return",
-    "Max DD", "Win Rate", "Sharpe", "# Trades", "Created",
-]
 
-
-def _pct(v):
-    return "—" if v is None or pd.isna(v) else f"{v:.2f}%"
-
-
-def _num(v, places=2):
-    return "—" if v is None or pd.isna(v) else f"{v:.{places}f}"
-
-
-def _params(params_json):
-    try:
-        d = json.loads(params_json)
-    except (TypeError, ValueError):
-        return ""
-    return ",".join(f"{k}={v}" for k, v in d.items())
-
-
-def build_table(runs: pd.DataFrame) -> pd.DataFrame:
-    """Format the raw runs frame into the display table (order preserved)."""
-    if runs.empty:
-        return pd.DataFrame(columns=TABLE_COLUMNS)
-    rows = []
-    for _, r in runs.iterrows():
-        rows.append({
-            "Run ID": r["run_id"],
-            "Strategy": r["strategy"],
-            "Instrument": r["instrument"],
-            "Params": _params(r["params_json"]),
-            "Period": f"{r['start_date']} → {r['end_date']}",
-            "CAGR": _pct(r["cagr"]),
-            "Return": _pct(r["return_pct"]),
-            "Max DD": _pct(r["max_drawdown"]),
-            "Win Rate": _pct(r["win_rate"]),
-            "Sharpe": _num(r["sharpe"]),
-            "# Trades": "—" if pd.isna(r["num_trades"]) else int(r["num_trades"]),
-            "Created": r["created_at"],
-        })
-    return pd.DataFrame(rows, columns=TABLE_COLUMNS)
-
-
-def filter_runs(runs: pd.DataFrame, strategy="All", instrument="All") -> pd.DataFrame:
-    out = runs
-    if strategy != "All":
-        out = out[out["strategy"] == strategy]
-    if instrument != "All":
-        out = out[out["instrument"] == instrument]
-    return out
-
-
-def load_equity_series(run_id) -> pd.Series:
-    """Equity curve for one run as a timestamp-indexed Series (raises if unknown)."""
-    artifacts = persistence.load_run_artifacts(run_id)
-    return artifacts["equity"]["Equity"]
-
+# --- formatters -------------------------------------------------------------
 
 def _fmt_pct(v):
     return "—" if v is None or pd.isna(v) else f"{float(v):.2f}%"
@@ -91,30 +34,114 @@ def _fmt_money(v):
     return "—" if v is None or pd.isna(v) else f"{float(v):,.0f}"
 
 
-# (stats key, display label, formatter) — curated, ordered subset for the table.
-_METRIC_ROWS = [
-    ("Start", "Start", str),
-    ("End", "End", str),
-    ("Return [%]", "Return", _fmt_pct),
-    ("Buy & Hold Return [%]", "Buy & Hold", _fmt_pct),
-    ("CAGR [%]", "CAGR", _fmt_pct),
-    ("Max. Drawdown [%]", "Max Drawdown", _fmt_pct),
-    ("Win Rate [%]", "Win Rate", _fmt_pct),
-    ("Sharpe Ratio", "Sharpe", _fmt_num),
-    ("Sortino Ratio", "Sortino", _fmt_num),
-    ("# Trades", "Trades", _fmt_int),  # label must not start with '#' (st.table renders markdown -> H1)
-    ("Profit Factor", "Profit Factor", _fmt_num),
-    ("Avg. Trade [%]", "Avg Trade", _fmt_pct),
-    ("Exposure Time [%]", "Exposure Time", _fmt_pct),
-    ("Equity Final [$]", "Final Equity", _fmt_money),
+def run_label(params_json) -> str:
+    """Short label of the params that vary (skip the constant lot size)."""
+    try:
+        d = json.loads(params_json)
+    except (TypeError, ValueError):
+        return ""
+    parts = [f"{k}={v}" for k, v in d.items() if k != "lot"]
+    return ", ".join(parts) if parts else "default"
+
+
+def _param_keys(runs: pd.DataFrame) -> list:
+    keys = []
+    for pj in runs["params_json"]:
+        for k in json.loads(pj):
+            if k not in keys:
+                keys.append(k)
+    return keys
+
+
+def _split_pf(split_json):
+    if not isinstance(split_json, str) or not split_json:
+        return None
+    return (json.loads(split_json).get("out_sample") or {}).get("profit_factor")
+
+
+def build_runs_table(runs: pd.DataFrame) -> pd.DataFrame:
+    """One row per run with params broken into columns + headline metrics.
+
+    Intended for a single strategy's runs (a cluster), so the param columns are
+    consistent. CAGR is included; Total PnL is final equity minus the cash base
+    (the per-lot rupee P&L for futures runs).
+    """
+    if runs.empty:
+        return pd.DataFrame()
+    pkeys = _param_keys(runs)
+    rows = []
+    for _, r in runs.iterrows():
+        p = json.loads(r["params_json"])
+        stats = json.loads(r["stats_json"]) if isinstance(r["stats_json"], str) else {}
+        final_eq = r["final_equity"]
+        pnl = None if pd.isna(final_eq) else final_eq - config.DEFAULT_CASH
+        row = {k: p.get(k, "—") for k in pkeys}
+        row.update({
+            "CAGR": _fmt_pct(r["cagr"]),
+            "Return": _fmt_pct(r["return_pct"]),
+            "Total PnL": _fmt_money(pnl),
+            "Win%": _fmt_pct(r["win_rate"]),
+            "PF": _fmt_num(stats.get("Profit Factor")),
+            "OOS PF": _fmt_num(_split_pf(r.get("split_json"))),
+            "Max DD": _fmt_pct(r["max_drawdown"]),
+            "Sharpe": _fmt_num(r["sharpe"]),
+            "Trades": _fmt_int(r["num_trades"]),
+            "Period": f"{r['start_date']} → {r['end_date']}",
+        })
+        rows.append(row)
+    cols = pkeys + ["CAGR", "Return", "Total PnL", "Win%", "PF", "OOS PF",
+                    "Max DD", "Sharpe", "Trades", "Period"]
+    return pd.DataFrame(rows, columns=cols)
+
+
+# Full backtesting.py stat set, in display order, for the comparison view.
+_FULL_STATS = [
+    "Start", "End", "Duration", "Exposure Time [%]", "Equity Final [$]",
+    "Equity Peak [$]", "Return [%]", "Buy & Hold Return [%]", "Return (Ann.) [%]",
+    "CAGR [%]", "Volatility (Ann.) [%]", "Sharpe Ratio", "Sortino Ratio",
+    "Calmar Ratio", "Max. Drawdown [%]", "Avg. Drawdown [%]",
+    "Max. Drawdown Duration", "# Trades", "Win Rate [%]", "Best Trade [%]",
+    "Worst Trade [%]", "Avg. Trade [%]", "Max. Trade Duration",
+    "Avg. Trade Duration", "Profit Factor", "Expectancy [%]", "SQN",
+    "Kelly Criterion",
 ]
 
 
-def build_metrics_table(metrics: dict) -> pd.DataFrame:
-    """Curated, formatted Metric/Value table for a run's full stats dict."""
-    rows = [{"Metric": label, "Value": fmt(metrics.get(key))}
-            for key, label, fmt in _METRIC_ROWS if key in metrics]
-    return pd.DataFrame(rows, columns=["Metric", "Value"])
+def _fmt_stat(key, v):
+    if v is None:
+        return "—"
+    if isinstance(v, str):
+        return v
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if pd.isna(f):
+        return "—"
+    if key == "# Trades":
+        return str(int(f))
+    if "[%]" in key:
+        return f"{f:.2f}%"
+    if "[$]" in key:
+        return f"{f:,.0f}"
+    return f"{f:.2f}"
+
+
+def build_comparison_table(runs: pd.DataFrame, run_ids) -> pd.DataFrame:
+    """Full backtesting.py stats for the selected runs, side by side."""
+    data = {"Metric": list(_FULL_STATS)}
+    used = {}
+    for rid in run_ids:
+        sub = runs[runs["run_id"] == rid]
+        if sub.empty:
+            continue
+        r = sub.iloc[0]
+        stats = json.loads(r["stats_json"]) if isinstance(r["stats_json"], str) else {}
+        base = run_label(r["params_json"]) or str(rid)[:8]
+        used[base] = used.get(base, 0) + 1
+        label = base if used[base] == 1 else f"{base} (#{used[base]})"
+        data[label] = [_fmt_stat(k, stats.get(k)) for k in _FULL_STATS]
+    return pd.DataFrame(data)
 
 
 def build_oos_table(split: dict) -> pd.DataFrame:
@@ -135,6 +162,14 @@ def build_oos_table(split: dict) -> pd.DataFrame:
         "In-Sample": col(split.get("in_sample")),
         "Out-of-Sample": col(split.get("out_sample")),
     })
+
+
+# --- equity + trades --------------------------------------------------------
+
+def load_equity_series(run_id) -> pd.Series:
+    """Equity curve for one run as a timestamp-indexed Series (raises if unknown)."""
+    artifacts = persistence.load_run_artifacts(run_id)
+    return artifacts["equity"]["Equity"]
 
 
 def equity_return_curve(series: pd.Series, max_points=2000) -> pd.Series:
@@ -168,7 +203,7 @@ TRADE_COLUMNS = ["Entry", "Exit", "Duration", "Entry Price", "Exit Price",
 def _fmt_dt(ts):
     if pd.isna(ts):
         return "—"
-    s = pd.Timestamp(ts).strftime("%a, %b %d %y %I:%M%p")  # e.g. Tue, Feb 01 25 09:45AM
+    s = pd.Timestamp(ts).strftime("%a, %b %d %y %I:%M%p")  # Tue, Feb 01 25 09:45AM
     return s.replace("AM", "am").replace("PM", "pm")
 
 
@@ -206,10 +241,6 @@ def build_trades_table(trades: pd.DataFrame) -> pd.DataFrame:
     }, columns=TRADE_COLUMNS).reset_index(drop=True)
 
 
-def _options(runs, column):
-    return ["All"] + sorted(runs[column].dropna().unique().tolist())
-
-
 # --- Streamlit shell (runs only under `streamlit run`) ----------------------
 
 if __name__ == "__main__":
@@ -218,58 +249,85 @@ if __name__ == "__main__":
     st.set_page_config(page_title="Backtests", layout="wide")
     st.title("Backtests")
 
-    runs = persistence.list_runs()  # already created_at DESC
+    runs = persistence.list_runs()  # newest first
 
     if runs.empty:
         st.info(
             "No runs yet. Run e.g.\n\n"
             "`python run.py turnaround_tuesday_intraday --instrument nifty "
-            "--start 2022-01-01`\n\n"
+            "--start 2015-01-01`\n\n"
             "to record your first backtest."
         )
+        st.stop()
+
+    # Cluster by strategy.
+    strategy = st.selectbox("Strategy", sorted(runs["strategy"].unique()))
+    sub = runs[runs["strategy"] == strategy].reset_index(drop=True)
+
+    st.subheader(f"{strategy} — {len(sub)} run(s)")
+    st.dataframe(build_runs_table(sub), width="stretch", hide_index=True)
+    st.caption(
+        "CAGR is annualized return on the fixed cash base (10M); for 1-lot futures "
+        "compare **Total PnL** and **PF / OOS PF** across rows. Each row is one "
+        "parameter variation."
+    )
+
+    # Build unique labels -> run_id for selection.
+    label_to_id = {}
+    for _, r in sub.iterrows():
+        base = run_label(r["params_json"]) or str(r["run_id"])[:8]
+        label, i = base, 2
+        while label in label_to_id:
+            label, i = f"{base} (#{i})", i + 1
+        label_to_id[label] = r["run_id"]
+
+    picked = st.multiselect(
+        "Select run(s) to compare / inspect",
+        list(label_to_id), default=list(label_to_id)[:2],
+    )
+    if not picked:
+        st.info("Select one or more runs above.")
+        st.stop()
+    picked_ids = [label_to_id[p] for p in picked]
+
+    st.subheader("Full metrics (backtesting.py)")
+    st.table(build_comparison_table(sub, picked_ids))
+
+    st.subheader("Equity curves (% return from start)")
+    curves = {}
+    for p in picked:
+        try:
+            curves[p] = equity_return_curve(load_equity_series(label_to_id[p]))
+        except (KeyError, FileNotFoundError):
+            pass
+    if curves:
+        st.line_chart(pd.DataFrame(curves))
+
+    if len(picked_ids) == 1:
+        rid = picked_ids[0]
+        row = sub[sub["run_id"] == rid].iloc[0]
+        split_json = row.get("split_json")
+        if isinstance(split_json, str) and split_json:
+            split = json.loads(split_json)
+            st.subheader("Out-of-sample validation")
+            st.caption(
+                f"Split at {split['split_date']} — in-sample is the first "
+                f"{split['fraction'] * 100:.0f}% of the range; out-of-sample is the "
+                f"most-recent {(1 - split['fraction']) * 100:.0f}% (unseen). An edge "
+                f"that holds here is far more trustworthy."
+            )
+            st.table(build_oos_table(split))
+        try:
+            artifacts = persistence.load_run_artifacts(rid)
+            st.subheader("Trades")
+            st.caption(
+                f"{row['slippage'] * 100:.2f}% slippage applied per fill; commission "
+                f"not modeled. PnL is per the strategy's position size (Nifty futures "
+                f"= 1 lot)."
+            )
+            st.dataframe(build_trades_table(artifacts["trades"]),
+                         width="stretch", hide_index=True)
+        except (KeyError, FileNotFoundError):
+            st.warning("Trades for this run are unavailable.")
     else:
-        c1, c2 = st.columns(2)
-        strategy = c1.selectbox("Strategy", _options(runs, "strategy"))
-        instrument = c2.selectbox("Instrument", _options(runs, "instrument"))
-        filtered = filter_runs(runs, strategy, instrument)
-
-        st.dataframe(build_table(filtered), width="stretch",
-                     hide_index=True)
-
-        if filtered.empty:
-            st.info("No runs match the current filter.")
-            st.stop()
-
-        run_id = st.selectbox("Inspect run", filtered["run_id"].tolist())
-        if run_id:
-            row = filtered[filtered["run_id"] == run_id].iloc[0]
-            try:
-                artifacts = persistence.load_run_artifacts(run_id)
-            except (KeyError, FileNotFoundError):
-                st.warning(f"Artifacts for {run_id} are unavailable.")
-            else:
-                st.subheader("Metrics")
-                st.table(build_metrics_table(artifacts["metrics"]))
-
-                split_json = row.get("split_json")
-                if isinstance(split_json, str) and split_json:
-                    split = json.loads(split_json)
-                    st.subheader("Out-of-sample validation")
-                    st.caption(
-                        f"Split at {split['split_date']} — in-sample is the first "
-                        f"{split['fraction'] * 100:.0f}% of the range; out-of-sample "
-                        f"is the most-recent {(1 - split['fraction']) * 100:.0f}% "
-                        f"(unseen). An edge that holds here is far more trustworthy."
-                    )
-                    st.table(build_oos_table(split))
-
-                st.subheader("Equity curve (% return from start)")
-                st.line_chart(equity_return_curve(artifacts["equity"]["Equity"]))
-                st.subheader("Trades")
-                st.caption(
-                    f"{row['slippage'] * 100:.2f}% slippage applied per fill; "
-                    f"commission not modeled. PnL is per the strategy's position "
-                    f"size (Nifty futures = 1 lot)."
-                )
-                st.dataframe(build_trades_table(artifacts["trades"]),
-                             width="stretch", hide_index=True)
+        st.caption("Select a single run to see its out-of-sample split and trades.")
