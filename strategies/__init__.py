@@ -64,3 +64,4 @@ def available():
 from . import ema_cross  # noqa: E402,F401
 from . import turnaround_tuesday  # noqa: E402,F401
 from . import turnaround_tuesday_intraday  # noqa: E402,F401
+from . import turn_of_month  # noqa: E402,F401
