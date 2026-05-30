@@ -1,8 +1,9 @@
 """Turn of the Month — Nifty futures seasonality.
 
-Buy one Nifty futures lot at 15:25 on the **5th-last trading day** of the month and
-sell at 15:25 on the **1st trading day of the next month** — capturing the
-well-documented turn-of-the-month drift around month-end.
+Buy one Nifty futures lot at 15:25 on the **Nth-last trading day** of the month
+(``entry_offset``, default 5) and sell at 15:25 on the **Mth trading day of the next
+month** (``exit_offset``, default 1) — capturing the well-documented
+turn-of-the-month drift around month-end.
 
 The "Nth-last trading day of the month" and "1st of next month" are calendar facts
 known in advance (exchange holidays are published ahead), so they're computed once
@@ -24,6 +25,7 @@ ACT_AT = time(15, 25)  # enter/exit at 15:25
 class TurnOfMonth(Strategy):
     lot = 65            # Nifty futures lot size
     entry_offset = 5    # buy on the Nth-last trading day of the month
+    exit_offset = 1     # sell on the Nth trading day of the next month (1 = 1st)
 
     def init(self):
         idx = pd.DatetimeIndex(self.data.index)
@@ -38,7 +40,9 @@ class TurnOfMonth(Strategy):
             if len(mdays) >= self.entry_offset:
                 self._entries.add(mdays[-self.entry_offset])
             if i + 1 < len(months):
-                self._exits.add(by_month[months[i + 1]][0])  # 1st of next month
+                ndays = by_month[months[i + 1]]  # next month, ascending
+                if len(ndays) >= self.exit_offset:
+                    self._exits.add(ndays[self.exit_offset - 1])  # Nth of next month
 
     def next(self):
         ts = self.data.index[-1]
@@ -58,6 +62,7 @@ register(
         params={
             "lot": {"type": int, "default": 65},
             "entry_offset": {"type": int, "default": 5},
+            "exit_offset": {"type": int, "default": 1},
         },
         lookback_params=[],
     ),

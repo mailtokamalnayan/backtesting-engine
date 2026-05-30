@@ -13,6 +13,8 @@ strategies fill on the signal bar's close. Note the spot index is not directly
 tradeable; see README's methodological caveats.
 """
 
+import warnings
+
 import config
 import strategies
 from backtesting import Backtest
@@ -88,9 +90,15 @@ def run_backtest(
         commission=slippage,  # backtesting.py's per-fill cost models our slippage
         trade_on_close=entry.trade_on_close,  # strategy declares its fill mode
         exclusive_orders=True,
-        finalize_trades=True,
+        # Do NOT force-close a still-open position at the last bar: that fabricates
+        # an exit that violates the strategy's rule. Only completed, rule-exited
+        # trades are reported; a currently-open position is simply excluded.
+        finalize_trades=False,
     )
-    stats = bt.run(**effective)
+    with warnings.catch_warnings():
+        # Expected: we intentionally leave a still-open final position out of stats.
+        warnings.filterwarnings("ignore", message="Some trades remain open")
+        stats = bt.run(**effective)
 
     return persistence.save_run(
         strategy=strategy_name,

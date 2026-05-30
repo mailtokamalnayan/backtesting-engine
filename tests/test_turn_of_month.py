@@ -24,17 +24,19 @@ def _monthly_intraday(n_bdays=85):
                         index=pd.DatetimeIndex(idx, name="Date"))
 
 
-def _expected_dates(data, offset=5):
+def _expected_dates(data, entry_offset=5, exit_offset=1):
     by_month = defaultdict(list)
     for d in sorted(set(data.index.date)):
         by_month[(d.year, d.month)].append(d)
     months = sorted(by_month)
     entries, exits = set(), set()
     for i, ym in enumerate(months):
-        if len(by_month[ym]) >= offset:
-            entries.add(by_month[ym][-offset])
+        if len(by_month[ym]) >= entry_offset:
+            entries.add(by_month[ym][-entry_offset])
         if i + 1 < len(months):
-            exits.add(by_month[months[i + 1]][0])
+            ndays = by_month[months[i + 1]]
+            if len(ndays) >= exit_offset:
+                exits.add(ndays[exit_offset - 1])
     return entries, exits
 
 
@@ -68,5 +70,16 @@ def test_entry_offset_param_shifts_entry():
     bt = Backtest(data, TurnOfMonth, cash=1_000_000, commission=0.0,
                   exclusive_orders=True, finalize_trades=True, trade_on_close=True)
     stats = bt.run(entry_offset=3)
-    entries, _ = _expected_dates(data, offset=3)
+    entries, _ = _expected_dates(data, entry_offset=3)
     assert set(stats["_trades"]["EntryTime"].dt.date) <= entries
+
+
+def test_exit_offset_param_shifts_exit():
+    data = _monthly_intraday()
+    bt = Backtest(data, TurnOfMonth, cash=1_000_000, commission=0.0,
+                  exclusive_orders=True, finalize_trades=True, trade_on_close=True)
+    stats = bt.run(exit_offset=3)  # exit on 3rd trading day of next month
+    _, exits = _expected_dates(data, exit_offset=3)
+    closed = stats["_trades"][stats["_trades"]["ExitTime"].dt.date.isin(exits)]
+    assert len(closed) >= 1
+    assert (closed["ExitTime"].dt.time == time(15, 25)).all()
