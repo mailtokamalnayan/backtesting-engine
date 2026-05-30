@@ -1,0 +1,18 @@
+[project]
+name = "backtesting-engine"
+version = "0.1.0"
+description = "Local, single-user backtesting harness for daily Nifty/BankNifty index strategies"
+requires-python = ">=3.9"
+dependencies = [
+    "backtesting==0.6.5",
+    "jugaad-data>=0.33.1",
+    "pandas",      # not a declared jugaad-data dep; required explicitly
+    "pyarrow",     # parquet for saved equity curves
+    "streamlit",   # read-only dashboard
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
