@@ -27,7 +27,9 @@ class InsufficientDataError(Exception):
 def _min_bars_required(spec, params) -> int:
     if not spec.lookback_params:
         return 0
-    return max(params[name] for name in spec.lookback_params) + _WARMUP_BUFFER
+    # int() guards a programmatic caller passing stringy lookback values; the CLI
+    # already coerces via param_spec.
+    return max(int(params[name]) for name in spec.lookback_params) + _WARMUP_BUFFER
 
 
 def run_backtest(

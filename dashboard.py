@@ -104,6 +104,10 @@ if __name__ == "__main__":
         st.dataframe(build_table(filtered), use_container_width=True,
                      hide_index=True)
 
+        if filtered.empty:
+            st.info("No runs match the current filter.")
+            st.stop()
+
         run_id = st.selectbox("Inspect run", filtered["run_id"].tolist())
         if run_id:
             try:
