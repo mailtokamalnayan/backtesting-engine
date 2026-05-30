@@ -19,21 +19,21 @@ python3 -m venv .venv
 ## The loop
 
 ```bash
-# Run a backtest (saves a new run every time)
+# Run a backtest (saves a new run every time). End date defaults to today.
 .venv/bin/python run.py ema_cross --instrument nifty --n1 10 --n2 20 \
-    --start 2018-01-01 --end 2024-12-31 --commission-pct 0.05
+    --start 2018-01-01
 
 # Tweak params and run again -> a second saved run
 .venv/bin/python run.py ema_cross --instrument nifty --n1 20 --n2 50 \
-    --start 2018-01-01 --end 2024-12-31 --commission-pct 0.05
+    --start 2018-01-01
 
 # Browse and compare every run
 .venv/bin/python -m streamlit run dashboard.py
 ```
 
-Commission: pass `--commission-pct` in **human percent** (`0.05` = 0.05% per side).
-A raw `--commission` fraction is also accepted but guarded — values ≥ 0.1 are
-rejected as a likely percent-vs-fraction mistake.
+Cost model: a fixed **slippage** is applied to every fill (`config.DEFAULT_SLIPPAGE`,
+default 0.5% per fill ≈ 1% round trip). Commission is not modeled separately. Change
+that one constant to tune (e.g. `0.0005` for a futures-like 0.05%).
 
 ## Writing a strategy
 
@@ -76,25 +76,25 @@ historical-data subscription. Setup:
    from engine.runner import run_backtest
    import datetime as dt
    run_backtest("turnaround_tuesday_intraday", "nifty",
-                dt.date(2022,1,1), dt.date(2024,12,31),
-                commission=0.0005, source=KiteIntradaySource())
+                dt.date(2022,1,1), source=KiteIntradaySource())  # end defaults to today
    ```
 
-`turnaround_tuesday_intraday` enters at 15:25 on a weak Monday (price below the daily
-9-EMA) and exits at 09:45 the next session — the overnight version of the daily rule.
+`turnaround_tuesday_intraday` trades **one Nifty futures lot** (`lot` units, default
+65): on a weak Monday (price at 15:25 below the daily 9-EMA) it buys 1 lot at 15:25
+and sells at 09:45 the next session unconditionally. Trade PnL is the rupee P&L of one
+futures contract (points × lot), net of slippage.
 
 ## Methodological caveats — read before trusting a number
 
 This harness is a fast idea-explorer, not a promise of real-world returns. It does
 **not** protect you from the following, and you should discount results accordingly:
 
-- **The spot index is not directly tradeable.** You cannot buy "NIFTY 50" at its
-  close. Real exposure comes from **futures** (roll cost, basis, expiry), **index
-  ETFs** like NIFTYBEES (tracking error, liquidity), or **options**. Results here run
-  on the spot index *level* and approximate a frictionless index-tracking instrument.
-  The commission models brokerage/slippage only — it does **not** model futures roll
-  or ETF tracking error. Treat the headline number as an upper-bound approximation,
-  not an executable P&L.
+- **Index price as a futures proxy.** Backtests run on the index *level* series, used
+  as a stand-in for the **futures** price. Strategies that trade futures (e.g.
+  `turnaround_tuesday_intraday`) size in lots so PnL is per-contract rupees, and a
+  fixed slippage is applied per fill. But the index level is **not** the futures price:
+  futures **roll cost, basis, and expiry** are not modeled. Treat PnL as an
+  approximation, not an executable statement.
 - **Fills are next-bar open.** A signal computed on today's close fills at tomorrow's
   open. Indian indices gap overnight, so realised fills can diverge meaningfully from
   the signal close — in either direction.

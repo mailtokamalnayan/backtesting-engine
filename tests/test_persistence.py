@@ -40,14 +40,14 @@ def _equity():
     )
 
 
-def _save(strategy="ema_cross", params=None, commission=0.0005, stats=None):
+def _save(strategy="ema_cross", params=None, slippage=0.005, stats=None):
     return persistence.save_run(
         strategy=strategy,
         instrument="NIFTY 50",
         params=params or {"n1": 10, "n2": 20},
         start="2020-01-01",
         end="2020-12-31",
-        commission=commission,
+        slippage=slippage,
         stats=stats if stats is not None else _stats(),
         trades_df=_trades(),
         equity_df=_equity(),

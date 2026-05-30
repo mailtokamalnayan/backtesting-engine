@@ -1,13 +1,18 @@
-"""Turnaround Tuesday — intraday execution.
+"""Turnaround Tuesday — intraday Nifty futures.
 
-The overnight version of the daily strategy: on a Monday, if price at 15:25 is
-below the daily 9-EMA (a weak Monday), buy at 15:25 and sell at 09:45 the next
-session. Captures the overnight-and-open move rather than a full close-to-close day.
+Trade one Nifty futures lot (``lot`` units, default 65): on a Monday, if price at
+15:25 is below the daily 9-EMA (a weak Monday), buy 1 lot at 15:25 and sell it at
+09:45 the next session — unconditionally. Captures the overnight-and-open move.
 
-Runs on minute bars (``interval="minute"``) and fills on the signal bar's close
-(``trade_on_close=True``), so the 15:25 entry and 09:45 exit fill at those bars.
-The 9-EMA is computed on *daily* closes via ``resample_apply`` and aligned back to
-the minute series — no look-ahead.
+Because each trade is a fixed lot, the trade PnL is the real rupee P&L of one Nifty
+futures contract (points moved x lot size), net of slippage. Runs on minute bars
+(``interval="minute"``) and fills on the signal bar's close (``trade_on_close=True``),
+so the 15:25 entry and 09:45 exit fill at those bars. The 9-EMA is computed on
+*daily* closes via ``resample_apply`` and aligned back to the minute series — no
+look-ahead.
+
+NOTE: Nifty's contract lot size has changed over time; ``lot`` defaults to 65 (per
+the user) and is tunable — set it to the current NSE contract size if different.
 """
 
 from datetime import time
@@ -28,7 +33,8 @@ def _ema(values, n):
 
 
 class TurnaroundTuesdayIntraday(Strategy):
-    n = 9  # daily EMA period
+    n = 9      # daily EMA period
+    lot = 65   # Nifty futures lot size (units traded per signal)
 
     def init(self):
         # Daily 9-EMA aligned onto the minute index (look-ahead safe).
@@ -50,7 +56,7 @@ class TurnaroundTuesdayIntraday(Strategy):
         if self._entry_day is None and not self.position \
                 and ts.weekday() == MONDAY and t >= ENTRY_AFTER \
                 and self.data.Close[-1] < self.daily_ema[-1]:
-            self.buy()
+            self.buy(size=self.lot)  # one futures lot
             self._entry_day = ts.date()
 
 
@@ -58,7 +64,10 @@ register(
     "turnaround_tuesday_intraday",
     TurnaroundTuesdayIntraday,
     ParamSpec(
-        params={"n": {"type": int, "default": 9}},
+        params={
+            "n": {"type": int, "default": 9},
+            "lot": {"type": int, "default": 65},
+        },
         # No bar-lookback guard: warmup is in *daily* terms (resample_apply yields
         # NaN until 9 days exist, which is NaN-safe), not minute bars.
         lookback_params=[],

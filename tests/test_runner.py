@@ -1,4 +1,4 @@
-"""U5: run engine — guards, commission effect, persistence wiring."""
+"""U5: run engine — guards, slippage effect, persistence wiring."""
 
 import datetime as dt
 
@@ -21,11 +21,11 @@ class _FixedSource(DataSource):
         return self._frame
 
 
-def _run(frame, params=None, commission=0.0005):
+def _run(frame, params=None, slippage=0.005):
     return run_backtest(
         "ema_cross", "nifty",
         dt.date(2020, 1, 1), dt.date(2020, 12, 31),
-        params=params, commission=commission, source=_FixedSource(frame),
+        params=params, slippage=slippage, source=_FixedSource(frame),
     )
 
 
@@ -36,9 +36,9 @@ def test_run_persists_a_complete_row(synthetic_ohlc):
     assert runs.iloc[0].num_trades >= 0
 
 
-def test_commission_reduces_final_equity_ae3(synthetic_ohlc):
-    id_free = _run(synthetic_ohlc, commission=0.0)
-    id_costly = _run(synthetic_ohlc, commission=0.02)
+def test_slippage_reduces_final_equity_ae3(synthetic_ohlc):
+    id_free = _run(synthetic_ohlc, slippage=0.0)
+    id_costly = _run(synthetic_ohlc, slippage=0.02)
     runs = persistence.list_runs().set_index("run_id")
     assert runs.loc[id_costly, "final_equity"] < runs.loc[id_free, "final_equity"]
 
@@ -69,9 +69,9 @@ def test_cash_guard_rejects_prices_above_cash(monkeypatch, synthetic_ohlc):
         _run(synthetic_ohlc)
 
 
-def test_bad_commission_raises_before_fetch(synthetic_ohlc):
-    with pytest.raises(ValueError, match="per-side fraction"):
-        _run(synthetic_ohlc, commission=0.1)
+def test_bad_slippage_raises_before_fetch(synthetic_ohlc):
+    with pytest.raises(ValueError, match="per-fill fraction"):
+        _run(synthetic_ohlc, slippage=0.1)
 
 
 def test_unknown_instrument_and_strategy_raise(synthetic_ohlc):

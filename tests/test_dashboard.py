@@ -98,6 +98,34 @@ def test_equity_return_curve_starts_at_zero():
     assert out.iloc[2] == pytest.approx(5.0)   # +5%
 
 
+def test_build_trades_table_formats_sorts_latest_first():
+    # Shape mimics trades.csv after round-trip: string times/duration.
+    trades = pd.DataFrame({
+        "EntryTime": ["2024-02-05 15:25:00", "2024-02-12 15:25:00"],
+        "ExitTime": ["2024-02-06 09:45:00", "2024-02-13 09:45:00"],
+        "Duration": ["0 days 18:20:00", "0 days 18:20:00"],
+        "EntryPrice": [21900.5, 22100.0],
+        "ExitPrice": [21950.0, 22050.0],
+        "PnL": [3217.5, -3250.0],
+        "ReturnPct": [0.00226, -0.00226],
+    })
+    table = dashboard.build_trades_table(trades)
+    assert list(table.columns) == dashboard.TRADE_COLUMNS
+    # Latest entry first (Feb 12 before Feb 05).
+    assert "Feb 12" in table.iloc[0]["Entry"]
+    assert table.iloc[0]["Entry"].endswith("03:25pm")
+    assert table.iloc[0]["Exit"].endswith("09:45am")
+    assert table.iloc[0]["Duration"] == "18h 20m"
+    assert table.iloc[0]["PnL"] == "-3,250"
+    assert table.iloc[0]["Return %"] == "-0.23%"
+
+
+def test_build_trades_table_empty_returns_columns():
+    out = dashboard.build_trades_table(pd.DataFrame())
+    assert list(out.columns) == dashboard.TRADE_COLUMNS
+    assert len(out) == 0
+
+
 def test_build_metrics_table_curates_and_formats():
     metrics = {
         "Start": "2022-01-03", "End": "2024-12-31",

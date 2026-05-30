@@ -38,6 +38,8 @@ INSTRUMENTS = {
 # (Nifty) / ~50k (BankNifty), so cash must sit well above them.
 DEFAULT_CASH = 10_000_000
 
-# Per-side commission as a fraction (0.0005 == 0.05%). See run.py for the
-# human-percent entry point and the percent-vs-fraction guard.
-DEFAULT_COMMISSION = 0.0005
+# Slippage applied to every fill, as a fraction (0.005 == 0.5%). Modeled via
+# backtesting.py's per-side cost, so a round trip costs ~2x this. Commission is
+# not modeled separately. NOTE: 0.5% per fill is aggressive for an index —
+# change this one constant to tune (e.g. 0.0005 for a futures-like 0.05%).
+DEFAULT_SLIPPAGE = 0.005

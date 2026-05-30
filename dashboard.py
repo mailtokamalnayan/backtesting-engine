@@ -141,6 +141,51 @@ def downsample_equity(series: pd.Series, max_points=2000) -> pd.Series:
     return series.iloc[::step]
 
 
+TRADE_COLUMNS = ["Entry", "Exit", "Duration", "Entry Price", "Exit Price",
+                 "PnL", "Return %"]
+
+
+def _fmt_dt(ts):
+    if pd.isna(ts):
+        return "—"
+    s = pd.Timestamp(ts).strftime("%a, %b %d %y %I:%M%p")  # e.g. Tue, Feb 01 25 09:45AM
+    return s.replace("AM", "am").replace("PM", "pm")
+
+
+def _fmt_duration(td):
+    if pd.isna(td):
+        return "—"
+    td = pd.Timedelta(td)
+    hours, rem = divmod(td.seconds, 3600)
+    minutes = rem // 60
+    parts = []
+    if td.days:
+        parts.append(f"{td.days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes or not parts:
+        parts.append(f"{minutes}m")
+    return " ".join(parts)
+
+
+def build_trades_table(trades: pd.DataFrame) -> pd.DataFrame:
+    """Curated, human-formatted trade list, latest entry first."""
+    if trades.empty:
+        return pd.DataFrame(columns=TRADE_COLUMNS)
+    t = trades.copy()
+    t["_entry"] = pd.to_datetime(t["EntryTime"])
+    t = t.sort_values("_entry", ascending=False)  # latest first
+    return pd.DataFrame({
+        "Entry": t["_entry"].map(_fmt_dt),
+        "Exit": pd.to_datetime(t["ExitTime"]).map(_fmt_dt),
+        "Duration": pd.to_timedelta(t["Duration"]).map(_fmt_duration),
+        "Entry Price": t["EntryPrice"].map(lambda v: f"{v:,.2f}"),
+        "Exit Price": t["ExitPrice"].map(lambda v: f"{v:,.2f}"),
+        "PnL": t["PnL"].map(lambda v: f"{v:,.0f}"),
+        "Return %": t["ReturnPct"].map(lambda v: f"{v * 100:.2f}%"),
+    }, columns=TRADE_COLUMNS).reset_index(drop=True)
+
+
 def _options(runs, column):
     return ["All"] + sorted(runs[column].dropna().unique().tolist())
 
@@ -158,8 +203,8 @@ if __name__ == "__main__":
     if runs.empty:
         st.info(
             "No runs yet. Run e.g.\n\n"
-            "`python run.py ema_cross --instrument nifty --n1 10 --n2 20 "
-            "--start 2018-01-01 --end 2024-12-31 --commission-pct 0.05`\n\n"
+            "`python run.py turnaround_tuesday_intraday --instrument nifty "
+            "--start 2022-01-01`\n\n"
             "to record your first backtest."
         )
     else:
@@ -177,6 +222,7 @@ if __name__ == "__main__":
 
         run_id = st.selectbox("Inspect run", filtered["run_id"].tolist())
         if run_id:
+            row = filtered[filtered["run_id"] == run_id].iloc[0]
             try:
                 artifacts = persistence.load_run_artifacts(run_id)
             except (KeyError, FileNotFoundError):
@@ -187,4 +233,10 @@ if __name__ == "__main__":
                 st.subheader("Equity curve (% return from start)")
                 st.line_chart(equity_return_curve(artifacts["equity"]["Equity"]))
                 st.subheader("Trades")
-                st.dataframe(artifacts["trades"], width="stretch")
+                st.caption(
+                    f"{row['slippage'] * 100:.2f}% slippage applied per fill; "
+                    f"commission not modeled. PnL is per the strategy's position "
+                    f"size (Nifty futures = 1 lot)."
+                )
+                st.dataframe(build_trades_table(artifacts["trades"]),
+                             width="stretch", hide_index=True)

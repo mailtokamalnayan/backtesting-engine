@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS runs (
     params_json  TEXT NOT NULL,
     start_date   TEXT NOT NULL,
     end_date     TEXT NOT NULL,
-    commission   REAL NOT NULL,
+    slippage     REAL NOT NULL,
     config_hash  TEXT NOT NULL,
     created_at   TEXT NOT NULL,
     artifact_dir TEXT NOT NULL,
@@ -68,7 +68,7 @@ def init_db():
         conn.execute(_SCHEMA)
 
 
-def config_hash(strategy, params, instrument, start, end, commission) -> str:
+def config_hash(strategy, params, instrument, start, end, slippage) -> str:
     """Stable hash of the full set of result-affecting inputs (R9)."""
     payload = json.dumps(
         {
@@ -77,7 +77,7 @@ def config_hash(strategy, params, instrument, start, end, commission) -> str:
             "instrument": instrument,
             "start": str(start),
             "end": str(end),
-            "commission": commission,
+            "slippage": slippage,
         },
         sort_keys=True,
         default=str,
@@ -120,7 +120,7 @@ def _write_artifacts(tmp_dir, params, stats_dict, trades_df, equity_df):
 
 
 def save_run(
-    strategy, instrument, params, start, end, commission,
+    strategy, instrument, params, start, end, slippage,
     stats, trades_df, equity_df,
 ):
     """Persist one run: write artifacts atomically, then insert the index row.
@@ -132,7 +132,7 @@ def save_run(
 
     now = _dt.datetime.now()
     run_id = f"{strategy}_{now:%Y%m%d%H%M%S}_{uuid.uuid4().hex[:6]}"
-    chash = config_hash(strategy, params, instrument, start, end, commission)
+    chash = config_hash(strategy, params, instrument, start, end, slippage)
     stats_dict = _stats_to_dict(stats)
 
     final_dir = config.RUNS_DIR / run_id
@@ -153,7 +153,7 @@ def save_run(
         "params_json": json.dumps(params, default=str),
         "start_date": str(start),
         "end_date": str(end),
-        "commission": float(commission),
+        "slippage": float(slippage),
         "config_hash": chash,
         "created_at": now.isoformat(),
         "artifact_dir": artifact_rel,

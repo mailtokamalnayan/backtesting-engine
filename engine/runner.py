@@ -1,9 +1,11 @@
 """The core run + save callable.
 
 ``run_backtest`` resolves data and strategy, runs a single backtest with fixed cash
-and fill mode and a configurable per-side commission, then saves the run. ``cash``
-and fill mode are constants (not user knobs), which keeps a run's identity to exactly
-strategy + params + instrument + date range + commission.
+and fill mode and a fixed slippage cost, then saves the run. ``cash`` and fill mode
+are constants (not user knobs), which keeps a run's identity to exactly strategy +
+params + instrument + date range + slippage. Slippage (default 0.5% per fill,
+``config.DEFAULT_SLIPPAGE``) stands in for all trading cost; commission is not
+modeled separately.
 
 Fill mode is declared per strategy (``Registered.trade_on_close``): most strategies
 fill at the next bar's open (realistic for an EOD signal), while signal-on-close
@@ -35,13 +37,13 @@ def _min_bars_required(spec, params) -> int:
 
 def run_backtest(
     strategy_name, instrument, start, end,
-    params=None, commission=config.DEFAULT_COMMISSION, source=None,
+    params=None, slippage=config.DEFAULT_SLIPPAGE, source=None,
 ):
     """Execute and persist one backtest. Returns the new ``run_id``."""
-    if not (0 <= commission < 0.1):
+    if not (0 <= slippage < 0.1):
         raise ValueError(
-            f"commission must be a per-side fraction in [0, 0.1); got {commission}. "
-            f"Did you pass a percent? 0.05% == 0.0005."
+            f"slippage must be a per-fill fraction in [0, 0.1); got {slippage}. "
+            f"Did you pass a percent? 0.5% == 0.005."
         )
 
     if instrument not in config.INSTRUMENTS:
@@ -83,7 +85,7 @@ def run_backtest(
         df,
         entry.cls,
         cash=config.DEFAULT_CASH,
-        commission=commission,
+        commission=slippage,  # backtesting.py's per-fill cost models our slippage
         trade_on_close=entry.trade_on_close,  # strategy declares its fill mode
         exclusive_orders=True,
         finalize_trades=True,
@@ -96,7 +98,7 @@ def run_backtest(
         params=effective,
         start=start,
         end=end,
-        commission=commission,
+        slippage=slippage,
         stats=stats,
         trades_df=stats["_trades"],
         equity_df=stats["_equity_curve"],

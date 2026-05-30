@@ -67,7 +67,7 @@ def test_runner_routes_intraday_through_get_intraday():
     src = _FixedIntraday(_intraday_declining())
     run_id = run_backtest("turnaround_tuesday_intraday", "nifty",
                           dt.date(2022, 1, 1), dt.date(2022, 3, 31),
-                          commission=0.0005, source=src)
+                          slippage=0.0005, source=src)
     assert run_id is not None
 
 

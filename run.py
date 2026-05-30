@@ -1,12 +1,11 @@
 """CLI entry point: trigger a backtest and save it.
 
-    python run.py ema_cross --instrument nifty --n1 10 --n2 20 \
-        --start 2018-01-01 --end 2024-12-31 --commission-pct 0.05
+    python run.py turnaround_tuesday_intraday --instrument nifty \
+        --start 2022-01-01
 
-Every invocation saves a new run. Strategy params (e.g. --n1) are discovered from
-the chosen strategy's param spec. Commission is entered as human percent via
---commission-pct (recommended) or as a raw fraction via --commission, and is guarded
-against the percent-vs-fraction mistake.
+Every invocation saves a new run. Strategy params (e.g. --n1, --lot) are discovered
+from the chosen strategy's param spec. End date defaults to today. Cost is a fixed
+slippage applied to every fill (config.DEFAULT_SLIPPAGE); commission is not modeled.
 """
 
 import argparse
@@ -25,28 +24,9 @@ def _date(s):
         raise argparse.ArgumentTypeError(f"invalid date {s!r}; use YYYY-MM-DD")
 
 
-def _resolve_commission(parser, args):
-    if args.commission is not None and args.commission_pct is not None:
-        parser.error("pass only one of --commission or --commission-pct")
-    if args.commission_pct is not None:
-        fraction = args.commission_pct / 100.0
-    elif args.commission is not None:
-        fraction = args.commission
-    else:
-        fraction = config.DEFAULT_COMMISSION
-
-    if not (0 <= fraction < 0.1):
-        parser.error(
-            f"commission {fraction} is out of range [0, 0.1) per side. "
-            f"--commission takes a fraction (0.0005 = 0.05%); "
-            f"for percent use --commission-pct."
-        )
-    return fraction
-
-
 def _build_base_parser():
     p = argparse.ArgumentParser(
-        prog="run.py", description="Run and save a daily index backtest."
+        prog="run.py", description="Run and save an index backtest."
     )
     p.add_argument("strategy", help=f"one of: {', '.join(strategies.available())}")
     p.add_argument("--instrument", default="nifty",
@@ -55,10 +35,6 @@ def _build_base_parser():
     p.add_argument("--start", type=_date, required=True, help="YYYY-MM-DD")
     p.add_argument("--end", type=_date, default=dt.date.today(),
                    help="YYYY-MM-DD (default: today / latest available)")
-    p.add_argument("--commission", type=float, default=None,
-                   help="per-side fraction (0.0005 = 0.05%%)")
-    p.add_argument("--commission-pct", type=float, default=None,
-                   help="per-side commission in human percent (0.05 = 0.05%%)")
     return p
 
 
@@ -82,18 +58,16 @@ def main(argv=None):
             f"Available: {', '.join(strategies.available())}"
         )
 
-    commission = _resolve_commission(parser, args)
     params = _parse_strategy_params(args.strategy, extras)
 
     run_id = run_backtest(
-        args.strategy, args.instrument, args.start, args.end,
-        params=params, commission=commission,
+        args.strategy, args.instrument, args.start, args.end, params=params,
     )
 
     print(f"saved run {run_id}")
     _print_headline(run_id)
-    print("note: fills are next-bar open on the (untradeable) spot index — "
-          "see README caveats.")
+    print(f"note: {config.DEFAULT_SLIPPAGE * 100:.2f}% slippage applied per fill; "
+          f"commission not modeled.")
     return 0
 
 
@@ -104,7 +78,7 @@ def _print_headline(run_id):
         runs = persistence.list_runs()
         row = runs[runs.run_id == run_id].iloc[0]
         print(f"  CAGR {row.cagr:.2f}%   Max DD {row.max_drawdown:.2f}%   "
-              f"# Trades {int(row.num_trades)}")
+              f"Trades {int(row.num_trades)}")
     except Exception:
         pass  # headline is best-effort; the run is already saved
 
