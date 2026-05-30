@@ -1,0 +1,8 @@
+# Streamlit project config (auto-loaded when running from the repo root).
+[server]
+# Auto-rerun the app whenever dashboard.py (or an imported local module) changes
+# on disk -- no manual restart needed for code edits.
+runOnSave = true
+
+[browser]
+gatherUsageStats = false

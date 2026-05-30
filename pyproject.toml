@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "watchdog"]   # watchdog: fast Streamlit run-on-save file watching
 kite = ["kiteconnect"]   # intraday/daily data via Zerodha Kite Connect
 
 [tool.pytest.ini_options]

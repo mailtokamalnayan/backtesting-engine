@@ -177,6 +177,20 @@ def list_runs() -> pd.DataFrame:
         )
 
 
+def delete_run(run_id):
+    """Remove a run's index row and its artifact directory. Raises if unknown."""
+    init_db()
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT artifact_dir FROM runs WHERE run_id = ?", (run_id,)
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise KeyError(f"unknown run_id {run_id!r}")
+        conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+    shutil.rmtree(config.ROOT / row[0], ignore_errors=True)
+
+
 def load_run_artifacts(run_id) -> dict:
     """Load a run's full metrics, trades, and equity curve for the detail view."""
     init_db()

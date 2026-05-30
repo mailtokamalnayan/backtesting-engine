@@ -116,6 +116,23 @@ def test_missing_hot_key_stores_null(isolated_store):
     assert pd.isna(row.sharpe)
 
 
+def test_delete_run_removes_row_and_artifacts(isolated_store):
+    keep = _save(params={"n1": 10, "n2": 20})
+    drop = _save(params={"n1": 5, "n2": 15})
+    drop_dir = isolated_store / "runs" / drop
+
+    persistence.delete_run(drop)
+
+    remaining = set(persistence.list_runs().run_id)
+    assert remaining == {keep}
+    assert not drop_dir.exists()
+
+
+def test_delete_unknown_run_raises(isolated_store):
+    with pytest.raises(KeyError):
+        persistence.delete_run("nope")
+
+
 def test_atomic_write_failure_leaves_no_dir_or_row(isolated_store, monkeypatch):
     def boom(*a, **k):
         raise IOError("disk full mid-write")
