@@ -16,7 +16,7 @@ from engine import persistence
 
 # Display column order for the runs table.
 TABLE_COLUMNS = [
-    "Run ID", "Strategy", "Instrument", "Params", "CAGR", "Return",
+    "Run ID", "Strategy", "Instrument", "Params", "Period", "CAGR", "Return",
     "Max DD", "Win Rate", "Sharpe", "# Trades", "Created",
 ]
 
@@ -48,6 +48,7 @@ def build_table(runs: pd.DataFrame) -> pd.DataFrame:
             "Strategy": r["strategy"],
             "Instrument": r["instrument"],
             "Params": _params(r["params_json"]),
+            "Period": f"{r['start_date']} → {r['end_date']}",
             "CAGR": _pct(r["cagr"]),
             "Return": _pct(r["return_pct"]),
             "Max DD": _pct(r["max_drawdown"]),

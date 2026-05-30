@@ -15,11 +15,13 @@ pytestmark = pytest.mark.usefixtures("isolated_store")
 def _runs_frame():
     return pd.DataFrame([
         {"run_id": "b", "strategy": "ema_cross", "instrument": "nifty",
-         "params_json": '{"n1": 10, "n2": 30}', "cagr": 11.8, "return_pct": 30.0,
+         "params_json": '{"n1": 10, "n2": 30}', "start_date": "2022-01-01",
+         "end_date": "2026-05-30", "cagr": 11.8, "return_pct": 30.0,
          "max_drawdown": -22.0, "win_rate": 50.0, "sharpe": 1.05, "num_trades": 8,
          "created_at": "2026-05-30T10:01:00"},
         {"run_id": "a", "strategy": "ema_cross", "instrument": "banknifty",
-         "params_json": '{"n1": 20, "n2": 50}', "cagr": 14.2, "return_pct": 42.0,
+         "params_json": '{"n1": 20, "n2": 50}', "start_date": "2020-01-01",
+         "end_date": "2024-12-31", "cagr": 14.2, "return_pct": 42.0,
          "max_drawdown": -18.0, "win_rate": 55.0, "sharpe": 1.23, "num_trades": 5,
          "created_at": "2026-05-30T10:00:00"},
     ])
@@ -33,6 +35,7 @@ def test_build_table_formats_and_preserves_order():
     assert table.iloc[1]["Max DD"] == "-18.00%"   # negative drawdown shown as-is
     assert table.iloc[1]["Sharpe"] == "1.23"
     assert table.iloc[0]["Params"] == "n1=10,n2=30"
+    assert table.iloc[0]["Period"] == "2022-01-01 → 2026-05-30"
     assert table.iloc[1]["# Trades"] == 5
 
 
