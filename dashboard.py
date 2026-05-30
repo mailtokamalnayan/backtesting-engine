@@ -118,7 +118,7 @@ if __name__ == "__main__":
         instrument = c2.selectbox("Instrument", _options(runs, "instrument"))
         filtered = filter_runs(runs, strategy, instrument)
 
-        st.dataframe(build_table(filtered), use_container_width=True,
+        st.dataframe(build_table(filtered), width="stretch",
                      hide_index=True)
 
         if filtered.empty:
@@ -138,4 +138,4 @@ if __name__ == "__main__":
                 left.subheader("Metrics")
                 left.json(artifacts["metrics"])
                 right.subheader("Trades")
-                right.dataframe(artifacts["trades"], use_container_width=True)
+                right.dataframe(artifacts["trades"], width="stretch")
