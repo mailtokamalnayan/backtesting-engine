@@ -102,7 +102,7 @@ _METRIC_ROWS = [
     ("Win Rate [%]", "Win Rate", _fmt_pct),
     ("Sharpe Ratio", "Sharpe", _fmt_num),
     ("Sortino Ratio", "Sortino", _fmt_num),
-    ("# Trades", "# Trades", _fmt_int),
+    ("# Trades", "Trades", _fmt_int),  # label must not start with '#' (st.table renders markdown -> H1)
     ("Profit Factor", "Profit Factor", _fmt_num),
     ("Avg. Trade [%]", "Avg Trade", _fmt_pct),
     ("Exposure Time [%]", "Exposure Time", _fmt_pct),

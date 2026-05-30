@@ -111,6 +111,6 @@ def test_build_metrics_table_curates_and_formats():
     assert vals["Return"] == "16.16%"
     assert vals["Max Drawdown"] == "-14.14%"
     assert vals["Sharpe"] == "0.36"
-    assert vals["# Trades"] == "31"
+    assert vals["Trades"] == "31"  # label has no leading '#' (would render as markdown H1)
     assert vals["Final Equity"] == "11,615,655"
     assert "ignored" not in table["Value"].values  # non-curated keys dropped
