@@ -2,5 +2,8 @@
 __pycache__/
 *.pyc
 .jdata_cache/
+.kite_cache/
+.kite_token.json
+.env
 results/
 .pytest_cache/

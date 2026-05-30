@@ -12,7 +12,7 @@ populates the registry.
 from collections import namedtuple
 from dataclasses import dataclass, field
 
-Registered = namedtuple("Registered", ["cls", "spec", "trade_on_close"])
+Registered = namedtuple("Registered", ["cls", "spec", "trade_on_close", "interval"])
 
 
 @dataclass
@@ -32,15 +32,19 @@ class ParamSpec:
 STRATEGIES = {}
 
 
-def register(name, cls, spec: ParamSpec, trade_on_close=False):
+def register(name, cls, spec: ParamSpec, trade_on_close=False, interval="day"):
     """Register a strategy.
 
     ``trade_on_close`` is a property of the strategy's logic, not a free runner
     knob: signal-on-close strategies (e.g. "buy at this close") set it True so
-    fills happen on the signal bar's close rather than the next bar's open. Because
-    it's fixed per strategy, it doesn't widen a run's identity.
+    fills happen on the signal bar's close rather than the next bar's open.
+
+    ``interval`` is the bar timeframe the strategy needs ("day", "minute", ...).
+    The runner fetches data at this interval; an intraday strategy run against a
+    daily-only source fails clearly. Both fields are fixed per strategy, so they
+    don't widen a run's identity.
     """
-    STRATEGIES[name] = Registered(cls, spec, trade_on_close)
+    STRATEGIES[name] = Registered(cls, spec, trade_on_close, interval)
 
 
 def get(name) -> Registered:
@@ -59,3 +63,4 @@ def available():
 # so `register`/`ParamSpec` are defined before the modules import them.
 from . import ema_cross  # noqa: E402,F401
 from . import turnaround_tuesday  # noqa: E402,F401
+from . import turnaround_tuesday_intraday  # noqa: E402,F401

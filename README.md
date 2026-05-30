@@ -41,6 +41,48 @@ Strategies are tiny `backtesting.py` `Strategy` subclasses registered by name. S
 `strategies/ema_cross.py` for the worked example. Declare which params are bar
 lookbacks via `lookback_params` so the engine can guard against too-short date ranges.
 
+A strategy also declares two execution properties at registration (fixed per
+strategy, so they don't change a run's identity):
+
+- `trade_on_close` — `True` for signal-on-close strategies that fill on the signal
+  bar's close (e.g. `turnaround_tuesday`); default `False` fills next-bar open.
+- `interval` — the bar timeframe it needs (`"day"` default, or `"minute"` etc.). The
+  runner fetches data at this interval; an intraday strategy run against a daily-only
+  source fails clearly.
+
+## Intraday via Zerodha Kite Connect
+
+Daily data comes from `jugaad-data` (free, no auth). Intraday (minute) data comes
+from **Kite Connect**, which requires a Zerodha account, an app, and a paid
+historical-data subscription. Setup:
+
+1. Create a Kite Connect app at https://developers.kite.trade/ with redirect URL
+   `http://127.0.0.1`. Enable the historical-data add-on.
+2. Export credentials (never commit them):
+   ```bash
+   export KITE_API_KEY=xxxx
+   export KITE_API_SECRET=yyyy
+   .venv/bin/python -m pip install -e ".[kite]"
+   ```
+3. Authenticate once (token saved to `.kite_token.json`, valid until ~7:30 AM next
+   day):
+   ```bash
+   .venv/bin/python -m data.kite_auth
+   ```
+4. Run an intraday strategy — the runner fetches minute bars via `KiteIntradaySource`,
+   chunking long ranges into 60-day windows and caching to `.kite_cache/`:
+   ```python
+   from data.kite_source import KiteIntradaySource
+   from engine.runner import run_backtest
+   import datetime as dt
+   run_backtest("turnaround_tuesday_intraday", "nifty",
+                dt.date(2022,1,1), dt.date(2024,12,31),
+                commission=0.0005, source=KiteIntradaySource())
+   ```
+
+`turnaround_tuesday_intraday` enters at 15:25 on a weak Monday (price below the daily
+9-EMA) and exits at 09:45 the next session — the overnight version of the daily rule.
+
 ## Methodological caveats — read before trusting a number
 
 This harness is a fast idea-explorer, not a promise of real-world returns. It does
@@ -65,11 +107,12 @@ This harness is a fast idea-explorer, not a promise of real-world returns. It do
 
 ## Clearing the data cache
 
-jugaad-data caches fetched months as pickles under `.jdata_cache/`. There is no
-force-refresh flag — delete the directory to invalidate:
+jugaad-data caches fetched months as pickles under `.jdata_cache/`; Kite candles
+cache to `.kite_cache/`. There is no force-refresh flag — delete the directory to
+invalidate:
 
 ```bash
-rm -rf .jdata_cache/
+rm -rf .jdata_cache/ .kite_cache/
 ```
 
 ## Project layout
@@ -77,6 +120,7 @@ rm -rf .jdata_cache/
 ```
 config.py          # paths, instrument map, defaults; sets J_CACHE_DIR
 data/source.py     # DataSource interface + jugaad daily source
+data/kite_source.py / kite_auth.py  # Kite Connect intraday/daily source + login
 strategies/        # strategy registry + example strategies
 engine/runner.py   # run_backtest(): the core run + save callable
 engine/persistence.py  # SQLite run index + per-run artifact files

@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+kite = ["kiteconnect"]   # intraday/daily data via Zerodha Kite Connect
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -56,7 +56,15 @@ def run_backtest(
     effective.update(params or {})
 
     source = source or JugaadDailySource()
-    df = source.get_daily(symbol, start, end)
+    if entry.interval == "day":
+        df = source.get_daily(symbol, start, end)
+    elif hasattr(source, "get_intraday"):
+        df = source.get_intraday(symbol, start, end, interval=entry.interval)
+    else:
+        raise ValueError(
+            f"strategy {strategy_name!r} needs {entry.interval} data, but "
+            f"{type(source).__name__} only provides daily bars."
+        )
 
     if config.DEFAULT_CASH <= df["Close"].max():
         raise ValueError(
