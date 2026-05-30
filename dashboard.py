@@ -74,6 +74,55 @@ def load_equity_series(run_id) -> pd.Series:
     return artifacts["equity"]["Equity"]
 
 
+def _fmt_pct(v):
+    return "—" if v is None or pd.isna(v) else f"{float(v):.2f}%"
+
+
+def _fmt_num(v):
+    return "—" if v is None or pd.isna(v) else f"{float(v):.2f}"
+
+
+def _fmt_int(v):
+    return "—" if v is None or pd.isna(v) else f"{int(float(v))}"
+
+
+def _fmt_money(v):
+    return "—" if v is None or pd.isna(v) else f"{float(v):,.0f}"
+
+
+# (stats key, display label, formatter) — curated, ordered subset for the table.
+_METRIC_ROWS = [
+    ("Start", "Start", str),
+    ("End", "End", str),
+    ("Return [%]", "Return", _fmt_pct),
+    ("Buy & Hold Return [%]", "Buy & Hold", _fmt_pct),
+    ("CAGR [%]", "CAGR", _fmt_pct),
+    ("Max. Drawdown [%]", "Max Drawdown", _fmt_pct),
+    ("Win Rate [%]", "Win Rate", _fmt_pct),
+    ("Sharpe Ratio", "Sharpe", _fmt_num),
+    ("Sortino Ratio", "Sortino", _fmt_num),
+    ("# Trades", "# Trades", _fmt_int),
+    ("Profit Factor", "Profit Factor", _fmt_num),
+    ("Avg. Trade [%]", "Avg Trade", _fmt_pct),
+    ("Exposure Time [%]", "Exposure Time", _fmt_pct),
+    ("Equity Final [$]", "Final Equity", _fmt_money),
+]
+
+
+def build_metrics_table(metrics: dict) -> pd.DataFrame:
+    """Curated, formatted Metric/Value table for a run's full stats dict."""
+    rows = [{"Metric": label, "Value": fmt(metrics.get(key))}
+            for key, label, fmt in _METRIC_ROWS if key in metrics]
+    return pd.DataFrame(rows, columns=["Metric", "Value"])
+
+
+def equity_return_curve(series: pd.Series, max_points=2000) -> pd.Series:
+    """Equity as % return from the start (begins at 0), downsampled for charting."""
+    base = series.iloc[0]
+    pct = (series / base - 1.0) * 100.0 if base else series * 0.0
+    return downsample_equity(pct, max_points)
+
+
 def downsample_equity(series: pd.Series, max_points=2000) -> pd.Series:
     """Shrink a large equity curve for charting.
 
@@ -132,10 +181,9 @@ if __name__ == "__main__":
             except (KeyError, FileNotFoundError):
                 st.warning(f"Artifacts for {run_id} are unavailable.")
             else:
-                st.subheader("Equity curve")
-                st.line_chart(downsample_equity(artifacts["equity"]["Equity"]))
-                left, right = st.columns([1, 2])
-                left.subheader("Metrics")
-                left.json(artifacts["metrics"])
-                right.subheader("Trades")
-                right.dataframe(artifacts["trades"], width="stretch")
+                st.subheader("Metrics")
+                st.table(build_metrics_table(artifacts["metrics"]))
+                st.subheader("Equity curve (% return from start)")
+                st.line_chart(equity_return_curve(artifacts["equity"]["Equity"]))
+                st.subheader("Trades")
+                st.dataframe(artifacts["trades"], width="stretch")

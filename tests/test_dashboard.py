@@ -85,3 +85,29 @@ def test_downsample_equity_passes_small_curve_through():
     series = pd.Series(range(500), dtype=float)
     out = dashboard.downsample_equity(series, max_points=2000)
     assert len(out) == 500
+
+
+def test_equity_return_curve_starts_at_zero():
+    series = pd.Series([1_000_000.0, 1_100_000.0, 1_050_000.0])
+    out = dashboard.equity_return_curve(series)
+    assert out.iloc[0] == 0.0                 # begins at 0%
+    assert out.iloc[1] == pytest.approx(10.0)  # +10%
+    assert out.iloc[2] == pytest.approx(5.0)   # +5%
+
+
+def test_build_metrics_table_curates_and_formats():
+    metrics = {
+        "Start": "2022-01-03", "End": "2024-12-31",
+        "Return [%]": 16.1567, "CAGR [%]": 3.5166, "Max. Drawdown [%]": -14.142,
+        "Sharpe Ratio": 0.365, "# Trades": 31, "Equity Final [$]": 11615655.37,
+        "_strategy": "ignored",
+    }
+    table = dashboard.build_metrics_table(metrics)
+    assert list(table.columns) == ["Metric", "Value"]
+    vals = dict(zip(table["Metric"], table["Value"]))
+    assert vals["Return"] == "16.16%"
+    assert vals["Max Drawdown"] == "-14.14%"
+    assert vals["Sharpe"] == "0.36"
+    assert vals["# Trades"] == "31"
+    assert vals["Final Equity"] == "11,615,655"
+    assert "ignored" not in table["Value"].values  # non-curated keys dropped

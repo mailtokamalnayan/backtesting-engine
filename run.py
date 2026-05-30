@@ -53,7 +53,8 @@ def _build_base_parser():
                    choices=sorted(config.INSTRUMENTS),
                    help="index alias (default: nifty)")
     p.add_argument("--start", type=_date, required=True, help="YYYY-MM-DD")
-    p.add_argument("--end", type=_date, required=True, help="YYYY-MM-DD")
+    p.add_argument("--end", type=_date, default=dt.date.today(),
+                   help="YYYY-MM-DD (default: today / latest available)")
     p.add_argument("--commission", type=float, default=None,
                    help="per-side fraction (0.0005 = 0.05%%)")
     p.add_argument("--commission-pct", type=float, default=None,
