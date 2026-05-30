@@ -63,6 +63,20 @@ def test_enters_1525_monday_exits_0945_next_session():
     assert (trades["ExitTime"].dt.date > trades["EntryTime"].dt.date).all()
 
 
+def test_hold_days_2_exits_two_sessions_later():
+    data = _intraday_declining()
+    bt = Backtest(data, TurnaroundTuesdayIntraday, cash=1_000_000, commission=0.0,
+                  exclusive_orders=True, finalize_trades=True, trade_on_close=True)
+    stats = bt.run(hold_days=2, exit_time="09:15")  # Wednesday-style exit
+    trades = stats["_trades"]
+    assert stats["# Trades"] >= 1
+    assert (trades["EntryTime"].dt.weekday == 0).all()   # Monday entry
+    assert (trades["ExitTime"].dt.weekday == 2).all()    # Wednesday exit
+    assert (trades["ExitTime"].dt.time == time(9, 15)).all()
+    held = (trades["ExitTime"].dt.normalize() - trades["EntryTime"].dt.normalize())
+    assert (held.dt.days >= 2).all()
+
+
 def test_runner_routes_intraday_through_get_intraday():
     src = _FixedIntraday(_intraday_declining())
     run_id = run_backtest("turnaround_tuesday_intraday", "nifty",
