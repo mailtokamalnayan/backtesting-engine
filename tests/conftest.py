@@ -13,6 +13,20 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import config
+
+
+@pytest.fixture
+def isolated_store(tmp_path, monkeypatch):
+    """Point persistence/runner/dashboard at a throwaway results dir per test."""
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir()
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    monkeypatch.setattr(config, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(config, "RUNS_DIR", runs_dir)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "index.sqlite")
+    return tmp_path
+
 
 @pytest.fixture
 def synthetic_ohlc():

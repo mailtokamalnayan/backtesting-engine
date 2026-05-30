@@ -5,22 +5,11 @@ import datetime as dt
 import pandas as pd
 import pytest
 
-import config
 import dashboard
 from data.source import DataSource
-from engine import persistence
 from engine.runner import run_backtest
 
-
-@pytest.fixture(autouse=True)
-def isolated_store(tmp_path, monkeypatch):
-    runs_dir = tmp_path / "runs"
-    runs_dir.mkdir()
-    monkeypatch.setattr(config, "ROOT", tmp_path)
-    monkeypatch.setattr(config, "RESULTS_DIR", tmp_path)
-    monkeypatch.setattr(config, "RUNS_DIR", runs_dir)
-    monkeypatch.setattr(config, "DB_PATH", tmp_path / "index.sqlite")
-    return tmp_path
+pytestmark = pytest.mark.usefixtures("isolated_store")
 
 
 def _runs_frame():

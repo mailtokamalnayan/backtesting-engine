@@ -9,17 +9,7 @@ import pytest
 import config
 from engine import persistence
 
-
-@pytest.fixture(autouse=True)
-def isolated_store(tmp_path, monkeypatch):
-    """Point persistence at a throwaway results dir for each test."""
-    runs_dir = tmp_path / "runs"
-    runs_dir.mkdir()
-    monkeypatch.setattr(config, "ROOT", tmp_path)
-    monkeypatch.setattr(config, "RESULTS_DIR", tmp_path)
-    monkeypatch.setattr(config, "RUNS_DIR", runs_dir)
-    monkeypatch.setattr(config, "DB_PATH", tmp_path / "index.sqlite")
-    return tmp_path
+pytestmark = pytest.mark.usefixtures("isolated_store")
 
 
 def _stats(cagr=12.0, trades=5, extra=None):

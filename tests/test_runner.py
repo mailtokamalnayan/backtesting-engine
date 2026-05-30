@@ -7,19 +7,10 @@ import pytest
 
 import config
 from data.source import DataSource
-from engine import persistence, runner
+from engine import persistence
 from engine.runner import InsufficientDataError, run_backtest
 
-
-@pytest.fixture(autouse=True)
-def isolated_store(tmp_path, monkeypatch):
-    runs_dir = tmp_path / "runs"
-    runs_dir.mkdir()
-    monkeypatch.setattr(config, "ROOT", tmp_path)
-    monkeypatch.setattr(config, "RESULTS_DIR", tmp_path)
-    monkeypatch.setattr(config, "RUNS_DIR", runs_dir)
-    monkeypatch.setattr(config, "DB_PATH", tmp_path / "index.sqlite")
-    return tmp_path
+pytestmark = pytest.mark.usefixtures("isolated_store")
 
 
 class _FixedSource(DataSource):
