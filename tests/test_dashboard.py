@@ -71,3 +71,17 @@ def test_load_equity_series_roundtrip(synthetic_ohlc):
 def test_load_equity_series_unknown_run_raises():
     with pytest.raises(KeyError):
         dashboard.load_equity_series("does_not_exist")
+
+
+def test_downsample_equity_shrinks_large_minute_curve():
+    idx = pd.date_range("2024-01-01 09:15", periods=7200, freq="min")  # ~5 days
+    series = pd.Series(range(7200), index=idx, dtype=float)
+    out = dashboard.downsample_equity(series, max_points=2000)
+    assert len(out) <= 2000
+    assert isinstance(out, pd.Series)
+
+
+def test_downsample_equity_passes_small_curve_through():
+    series = pd.Series(range(500), dtype=float)
+    out = dashboard.downsample_equity(series, max_points=2000)
+    assert len(out) == 500

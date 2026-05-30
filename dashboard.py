@@ -74,6 +74,23 @@ def load_equity_series(run_id) -> pd.Series:
     return artifacts["equity"]["Equity"]
 
 
+def downsample_equity(series: pd.Series, max_points=2000) -> pd.Series:
+    """Shrink a large equity curve for charting.
+
+    An intraday run's curve has one point per minute bar (~280k over 3 years),
+    which makes the browser chart unresponsive. Collapse to daily closes first, then
+    evenly sample if still large. Daily-run curves (already small) pass through.
+    """
+    if len(series) <= max_points:
+        return series
+    if isinstance(series.index, pd.DatetimeIndex):
+        series = series.resample("D").last().dropna()
+        if len(series) <= max_points:
+            return series
+    step = max(1, len(series) // max_points)
+    return series.iloc[::step]
+
+
 def _options(runs, column):
     return ["All"] + sorted(runs[column].dropna().unique().tolist())
 
@@ -116,7 +133,7 @@ if __name__ == "__main__":
                 st.warning(f"Artifacts for {run_id} are unavailable.")
             else:
                 st.subheader("Equity curve")
-                st.line_chart(artifacts["equity"]["Equity"])
+                st.line_chart(downsample_equity(artifacts["equity"]["Equity"]))
                 left, right = st.columns([1, 2])
                 left.subheader("Metrics")
                 left.json(artifacts["metrics"])
