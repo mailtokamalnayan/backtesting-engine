@@ -16,6 +16,8 @@ The Vercel calls are kept as pure command-string builders (``deploy_command`` /
 without touching the network.
 """
 
+import json
+import re
 import subprocess
 import sys
 
@@ -41,6 +43,24 @@ def _run(command):
     return subprocess.run(command, capture_output=True, text=True)
 
 
+def parse_deploy_url(stdout):
+    """Pull the production URL from `vercel deploy` stdout.
+
+    Recent CLI versions print a JSON object (URL at ``.deployment.url``); older
+    ones printed the bare URL as the sole line. Try JSON first, then fall back to
+    the last ``*.vercel.app`` URL in the output. Returns None if none is found.
+    """
+    text = stdout.strip()
+    try:
+        url = json.loads(text).get("deployment", {}).get("url")
+        if url:
+            return url
+    except (ValueError, AttributeError):
+        pass
+    matches = re.findall(r"https://[^\s\"']+\.vercel\.app", text)
+    return matches[-1] if matches else None
+
+
 def publish():
     print("exporting site/data.json from saved runs ...")
     export_site.export()
@@ -53,7 +73,11 @@ def publish():
         sys.stderr.write(deploy.stderr)
         return 1
 
-    url = deploy.stdout.strip().splitlines()[-1].strip()
+    url = parse_deploy_url(deploy.stdout)
+    if not url:
+        sys.stderr.write("could not parse a deployment URL from vercel output:\n")
+        sys.stderr.write(deploy.stdout)
+        return 1
     print(f"deployed: {url}")
 
     print(f"re-pointing alias {ALIAS} ...")

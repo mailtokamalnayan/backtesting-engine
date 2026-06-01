@@ -15,6 +15,14 @@ class _Result:
         self.stderr = stderr
 
 
+# Shape of recent `vercel deploy --prod` stdout: a JSON object, URL at deployment.url.
+_DEPLOY_URL = "https://backtest-in-abc123-kamal.vercel.app"
+_DEPLOY_JSON = (
+    '{"status": "ok", "deployment": {"id": "dpl_x", "url": "%s", '
+    '"readyState": "READY"}, "message": "ready."}' % _DEPLOY_URL
+)
+
+
 @pytest.fixture
 def recorder(monkeypatch):
     """Record commands run and export() calls, in order, without touching network."""
@@ -26,7 +34,7 @@ def recorder(monkeypatch):
     def fake_run(command):
         events.append(("run", command))
         if command[:2] == ["vercel", "deploy"]:
-            return _Result(stdout="https://backtest-in-nf-abc123-kamal.vercel.app\n")
+            return _Result(stdout=_DEPLOY_JSON)
         return _Result()  # alias set -> success
 
     monkeypatch.setattr(publish.export_site, "export", fake_export)
@@ -61,7 +69,16 @@ def test_parsed_deploy_url_is_aliased(recorder):
     publish.publish()
     alias_cmd = recorder[2][1]
     # the URL from the (mocked) deploy stdout is what gets aliased
-    assert alias_cmd[3] == "https://backtest-in-nf-abc123-kamal.vercel.app"
+    assert alias_cmd[3] == _DEPLOY_URL
+
+
+def test_parse_deploy_url_handles_json_and_bare_and_missing():
+    assert publish.parse_deploy_url(_DEPLOY_JSON) == _DEPLOY_URL
+    # legacy bare-URL stdout still parses via the regex fallback
+    assert publish.parse_deploy_url(
+        "https://foo-xyz.vercel.app\n") == "https://foo-xyz.vercel.app"
+    # no URL anywhere -> None (publish() turns this into a clean failure)
+    assert publish.parse_deploy_url("nothing useful here") is None
 
 
 def test_deploy_failure_skips_alias_and_surfaces_stderr(monkeypatch, capsys):
