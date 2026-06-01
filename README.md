@@ -23,13 +23,20 @@ python3 -m venv .venv
 .venv/bin/python run.py ema_cross --instrument nifty --n1 10 --n2 20 \
     --start 2018-01-01
 
-# Tweak params and run again -> a second saved run
-.venv/bin/python run.py ema_cross --instrument nifty --n1 20 --n2 50 \
-    --start 2018-01-01
+# Sweep: a comma-separated value is a sweep axis. This runs the cartesian
+# product (3 x 2 = 6 saved runs) and fetches the data range only once.
+.venv/bin/python run.py ema_cross --instrument nifty \
+    --n1 10,20,50 --n2 100,200 --start 2018-01-01
 
 # Browse and compare every run
 .venv/bin/python -m streamlit run dashboard.py
+
+# Publish the static site (export -> deploy) when you're happy with the runs
+make publish
 ```
+
+The source is chosen by the strategy's `interval` (daily → `jugaad-data`, minute →
+Kite Connect) and built once per command, so a sweep shares a single data fetch.
 
 Cost model: a fixed **slippage** is applied to every fill (`config.DEFAULT_SLIPPAGE`,
 default 0.5% per fill ≈ 1% round trip). Commission is not modeled separately. Change

@@ -1,15 +1,20 @@
-"""CLI entry point: trigger a backtest and save it.
+"""CLI entry point: run a backtest (or a sweep) and save it.
 
-    python run.py turnaround_tuesday --instrument nifty \
-        --start 2022-01-01
+    # single run
+    python run.py turnaround_tuesday --instrument nifty --start 2015-01-01
 
-Every invocation saves a new run. Strategy params (e.g. --n1, --lot) are discovered
-from the chosen strategy's param spec. End date defaults to today. Cost is a fixed
-slippage applied to every fill (config.DEFAULT_SLIPPAGE); commission is not modeled.
+    # sweep: comma-separated params expand to the cartesian product of runs
+    python run.py turnaround_tuesday --instrument nifty --start 2015-01-01 \
+        --n 9,21,50 --exit_time 09:18
+
+Every run saves to the index. A sweep builds one data source and shares it across
+all runs, so the Kite range is fetched/refreshed once. End date defaults to today.
+Cost is a fixed slippage per fill (config.DEFAULT_SLIPPAGE); commission is not modeled.
 """
 
 import argparse
 import datetime as dt
+import itertools
 import sys
 
 import config
@@ -26,7 +31,7 @@ def _date(s):
 
 def _build_base_parser():
     p = argparse.ArgumentParser(
-        prog="run.py", description="Run and save an index backtest."
+        prog="run.py", description="Run and save an index backtest (or sweep)."
     )
     p.add_argument("strategy", help=f"one of: {', '.join(strategies.available())}")
     p.add_argument("--instrument", default="nifty",
@@ -38,14 +43,40 @@ def _build_base_parser():
     return p
 
 
-def _parse_strategy_params(strategy, extras):
-    """Coerce leftover --key value flags against the strategy's param spec."""
+def _parse_param_combos(strategy, extras):
+    """Expand strategy params into a list of coerced param dicts.
+
+    A comma-separated value (e.g. ``--n 9,21,50``) is a sweep axis; the cartesian
+    product of all such axes is the run set. Raw tokens are coerced via the
+    strategy's ``param_spec`` (a single value coerces identically to a one-run call).
+    Raises ``ValueError`` on an uncoercible token.
+    """
     spec = strategies.get(strategy).spec
     pp = argparse.ArgumentParser(prog=f"run.py {strategy}", add_help=False)
+    for name in spec.params:
+        pp.add_argument(f"--{name}", default=None)  # capture raw strings
+    raw = vars(pp.parse_args(extras))
+
+    axes = {}
     for name, meta in spec.params.items():
-        pp.add_argument(f"--{name}", type=meta["type"], default=meta["default"])
-    ns = pp.parse_args(extras)
-    return vars(ns)
+        if raw[name] is None:
+            axes[name] = [meta["default"]]
+        else:
+            axes[name] = [spec.coerce(name, tok.strip())
+                          for tok in str(raw[name]).split(",")]
+
+    names = list(axes)
+    return [dict(zip(names, values))
+            for values in itertools.product(*(axes[n] for n in names))]
+
+
+def _build_source(strategy):
+    """One data source for the whole sweep, chosen by the strategy's interval."""
+    if strategies.get(strategy).interval == "day":
+        from data.source import JugaadDailySource
+        return JugaadDailySource()
+    from data.kite_source import KiteIntradaySource
+    return KiteIntradaySource()
 
 
 def main(argv=None):
@@ -53,34 +84,47 @@ def main(argv=None):
     args, extras = parser.parse_known_args(argv)
 
     if args.strategy not in strategies.available():
-        parser.error(
-            f"unknown strategy {args.strategy!r}. "
-            f"Available: {', '.join(strategies.available())}"
-        )
+        parser.error(f"unknown strategy {args.strategy!r}. "
+                     f"Available: {', '.join(strategies.available())}")
 
-    params = _parse_strategy_params(args.strategy, extras)
+    try:
+        combos = _parse_param_combos(args.strategy, extras)
+    except ValueError as err:
+        parser.error(f"bad parameter value: {err}")
 
-    run_id = run_backtest(
-        args.strategy, args.instrument, args.start, args.end, params=params,
-    )
+    # One shared source: the range is fetched/refreshed once for the whole sweep.
+    # A fetch failure raises on the first run before anything is saved.
+    source = _build_source(args.strategy)
+    results = []
+    for params in combos:
+        run_id = run_backtest(args.strategy, args.instrument, args.start, args.end,
+                              params=params, source=source)
+        results.append((run_id, params))
 
-    print(f"saved run {run_id}")
-    _print_headline(run_id)
+    _print_summary(results)
     print(f"note: {config.DEFAULT_SLIPPAGE * 100:.2f}% slippage applied per fill; "
           f"commission not modeled.")
     return 0
 
 
-def _print_headline(run_id):
+def _print_summary(results):
+    print(f"saved {len(results)} run(s):")
     try:
         from engine import persistence
 
-        runs = persistence.list_runs()
-        row = runs[runs.run_id == run_id].iloc[0]
-        print(f"  CAGR {row.cagr:.2f}%   Max DD {row.max_drawdown:.2f}%   "
-              f"Trades {int(row.num_trades)}")
+        runs = persistence.list_runs().set_index("run_id")
     except Exception:
-        pass  # headline is best-effort; the run is already saved
+        runs = None
+    for run_id, params in results:
+        label = ", ".join(f"{k}={v}" for k, v in params.items() if k != "lot")
+        try:
+            r = runs.loc[run_id]
+            pnl = r.final_equity - config.DEFAULT_CASH
+            print(f"  {label or 'default':28} trades {int(r.num_trades):>4}  "
+                  f"PnL Rs {pnl:>12,.0f}  CAGR {r.cagr:6.2f}%  "
+                  f"MaxDD {r.max_drawdown:6.2f}%")
+        except Exception:
+            print(f"  {label or 'default':28} -> {run_id}")
 
 
 if __name__ == "__main__":
