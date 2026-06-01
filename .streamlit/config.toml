@@ -6,3 +6,12 @@ runOnSave = true
 
 [browser]
 gatherUsageStats = false
+
+# Refined "quant terminal" theme to match the exported static site.
+[theme]
+base = "light"
+primaryColor = "#126b62"
+backgroundColor = "#fbfbf8"
+secondaryBackgroundColor = "#f4f2ec"
+textColor = "#1c2024"
+font = "sans serif"

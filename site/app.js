@@ -41,10 +41,38 @@ function selectStrategy(name) {
   renderSelection();
 }
 
+function isNumericVal(v) {
+  if (typeof v === "number") return true;
+  if (typeof v !== "string") return false;
+  return /^[-+]?[₹$]?[\d,]+(\.\d+)?%?$/.test(v.trim());
+}
+
+// Colour signed *performance* cells only: negatives red, positive %/money green.
+// Structural numbers (PF, Sharpe, counts, params) stay neutral.
+function colorClass(v) {
+  if (typeof v !== "string") return "";
+  const s = v.trim();
+  if (s.startsWith("-") && s !== "—") return "neg";
+  const perf = s.endsWith("%") || /\d,\d/.test(s);
+  return perf && /[1-9]/.test(s) ? "pos" : "";
+}
+
 function table(columns, rows) {
+  // A column is right-aligned when most of its values are numeric.
+  const rightCol = {};
+  columns.forEach((c) => {
+    const vals = rows.map((r) => r[c]).filter((v) => v != null && v !== "—" && v !== "");
+    const n = vals.filter(isNumericVal).length;
+    rightCol[c] = vals.length > 0 && n / vals.length >= 0.5;
+  });
   const t = document.createElement("table");
-  const thead = t.createTHead().insertRow();
-  columns.forEach((c) => { const th = document.createElement("th"); th.textContent = c; thead.appendChild(th); });
+  const htr = t.createTHead().insertRow();
+  columns.forEach((c) => {
+    const th = document.createElement("th");
+    th.textContent = c;
+    if (rightCol[c]) th.className = "num";
+    htr.appendChild(th);
+  });
   const tb = t.createTBody();
   rows.forEach((row) => {
     const tr = tb.insertRow();
@@ -52,7 +80,12 @@ function table(columns, rows) {
       const td = tr.insertCell();
       const v = row[c];
       td.textContent = (v === undefined || v === null) ? "—" : v;
-      if (typeof v === "string" && (v.startsWith("-") && v.endsWith("%"))) td.classList.add("neg");
+      const cls = [];
+      if (rightCol[c]) cls.push("num");
+      if (isNumericVal(v)) cls.push("figure");
+      const col = colorClass(v);
+      if (col) cls.push(col);
+      if (cls.length) td.className = cls.join(" ");
     });
   });
   return t;
@@ -141,33 +174,55 @@ function renderTrades(runs) {
   $("trades").replaceChildren(table(cols, r.trades));
 }
 
+const PALETTE = ["#126b62", "#c0392b", "#3b6ea5", "#b07d2b", "#7d5ba6", "#1f7a47"];
+
 function renderChart(runs) {
   // Union of dates across selected runs -> aligned datasets (null where missing).
   const dateSet = new Set();
   runs.forEach((r) => r.equity.forEach(([d]) => dateSet.add(d)));
   const labels = [...dateSet].sort();
-  const palette = ["#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed", "#0891b2"];
-  const datasets = runs.map((r, i) => {
-    const m = new Map(r.equity);
-    return {
-      label: r.label,
-      data: labels.map((d) => (m.has(d) ? m.get(d) : null)),
-      borderColor: palette[i % palette.length],
-      borderWidth: 1.5, pointRadius: 0, spanGaps: true, tension: 0,
-    };
-  });
+  const datasets = runs.map((r, i) => ({
+    label: r.label,
+    data: (() => { const m = new Map(r.equity); return labels.map((d) => (m.has(d) ? m.get(d) : null)); })(),
+    borderColor: PALETTE[i % PALETTE.length],
+    borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, spanGaps: true, tension: 0,
+  }));
   if (CHART) CHART.destroy();
   CHART = new Chart($("equity"), {
     type: "line",
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
+      font: { family: "'IBM Plex Mono', monospace", size: 11 },
+      color: "#6c7178",
       interaction: { intersect: false, mode: "index" },
       scales: {
-        x: { ticks: { maxTicksLimit: 10, autoSkip: true }, grid: { display: false } },
-        y: { ticks: { callback: (v) => v + "%" } },
+        x: {
+          ticks: { maxTicksLimit: 9, autoSkip: true, color: "#9aa0a6",
+                   font: { family: "'IBM Plex Mono', monospace", size: 10 } },
+          grid: { display: false }, border: { color: "#e9e7e1" },
+        },
+        y: {
+          ticks: { callback: (v) => v + "%", color: "#9aa0a6",
+                   font: { family: "'IBM Plex Mono', monospace", size: 10 } },
+          grid: { color: (c) => (c.tick.value === 0 ? "#cdcabf" : "#f1efe9") },
+          border: { display: false },
+        },
       },
-      plugins: { legend: { position: "top" } },
+      plugins: {
+        legend: {
+          position: "top", align: "start",
+          labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true,
+                    pointStyle: "line", color: "#1c2024",
+                    font: { family: "'IBM Plex Mono', monospace", size: 11.5 } },
+        },
+        tooltip: {
+          backgroundColor: "#1c2024", padding: 10, cornerRadius: 6,
+          titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
+          bodyFont: { family: "'IBM Plex Mono', monospace", size: 11.5 },
+          callbacks: { label: (x) => ` ${x.dataset.label}: ${x.parsed.y > 0 ? "+" : ""}${x.parsed.y}%` },
+        },
+      },
     },
   });
 }

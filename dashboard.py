@@ -249,6 +249,26 @@ if __name__ == "__main__":
     import streamlit as st
 
     st.set_page_config(page_title="Backtests", layout="wide")
+    # Light, targeted styling to match the exported static site (IBM Plex type,
+    # serif title, tabular monospace figures in tables). Robust selectors only —
+    # the app structure is unchanged.
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600&display=swap');
+        .stApp, .stApp p, .stApp label, [class*="st-"] { font-family: 'IBM Plex Sans', sans-serif; }
+        .stApp h1 { font-family: 'IBM Plex Serif', Georgia, serif; letter-spacing: -0.01em; }
+        .stApp h2, .stApp h3 { letter-spacing: -0.01em; }
+        [data-testid="stTable"] table { font-size: 13px; font-variant-numeric: tabular-nums; }
+        [data-testid="stTable"] td { font-family: 'IBM Plex Mono', monospace; }
+        [data-testid="stTable"] th {
+            text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; color: #6c7178;
+        }
+        [data-testid="stDataFrame"] { font-variant-numeric: tabular-nums; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.title("Backtests")
 
     runs = persistence.list_runs()  # newest first
