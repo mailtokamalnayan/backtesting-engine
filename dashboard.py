@@ -15,6 +15,9 @@ import pandas as pd
 import config
 from engine import persistence
 
+# Shared line palette — kept in sync with site/app.js PALETTE.
+PALETTE = ["#126b62", "#c0392b", "#3b6ea5", "#b07d2b", "#7d5ba6", "#1f7a47"]
+
 
 # --- formatters -------------------------------------------------------------
 
@@ -265,6 +268,9 @@ if __name__ == "__main__":
             text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; color: #6c7178;
         }
         [data-testid="stDataFrame"] { font-variant-numeric: tabular-nums; }
+        /* show full param labels in the run multiselect chips (no truncation) */
+        [data-baseweb="tag"] { max-width: none !important; }
+        [data-baseweb="tag"] span { max-width: none !important; text-overflow: clip !important; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -316,14 +322,35 @@ if __name__ == "__main__":
     st.table(build_comparison_table(sub, picked_ids))
 
     st.subheader("Equity curves (% return from start)")
-    curves = {}
+    import altair as alt
+
+    frames = []
     for p in picked:
         try:
-            curves[p] = equity_return_curve(load_equity_series(label_to_id[p]))
+            s = equity_return_curve(load_equity_series(label_to_id[p]))
         except (KeyError, FileNotFoundError):
-            pass
-    if curves:
-        st.line_chart(pd.DataFrame(curves))
+            continue
+        frames.append(pd.DataFrame({"Date": s.index, "Return %": s.to_numpy(), "Run": p}))
+    if frames:
+        cdf = pd.concat(frames, ignore_index=True)
+        chart = (
+            alt.Chart(cdf)
+            .mark_line(strokeWidth=1.5)
+            .encode(
+                x=alt.X("Date:T", title=None),
+                y=alt.Y("Return %:Q", title="% return from start"),
+                # labelLimit large so long param labels never truncate.
+                color=alt.Color("Run:N", title=None,
+                                scale=alt.Scale(range=PALETTE),
+                                legend=alt.Legend(orient="top", labelLimit=1000,
+                                                  symbolType="stroke", columns=1)),
+                tooltip=[alt.Tooltip("Run:N", title="Run"),
+                         alt.Tooltip("Date:T", title="Date"),
+                         alt.Tooltip("Return %:Q", format="+.2f")],
+            )
+            .properties(width="container", height=380)
+        )
+        st.altair_chart(chart)
 
     # In-sample / out-of-sample, one table per selected run.
     st.subheader("Out-of-sample validation")
