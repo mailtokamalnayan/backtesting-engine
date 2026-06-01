@@ -86,7 +86,7 @@ function colorClass(v) {
   return perf && /[1-9]/.test(s) ? "pos" : "";
 }
 
-function table(columns, rows) {
+function table(columns, rows, opts = {}) {
   // A column is right-aligned when most of its values are numeric.
   const rightCol = {};
   columns.forEach((c) => {
@@ -117,8 +117,12 @@ function table(columns, rows) {
       const col = colorClass(v);
       if (col) cls.push(col);
       // First column is a row label (e.g. a metric name): give it the same hover help.
+      // cssTip tables (the Full-metrics compare) use the styled ::after tooltip only;
+      // others use the native title= bubble. Never both (they'd compete).
       if (ci === 0 && GLOSSARY[v]) {
-        td.title = GLOSSARY[v]; td.dataset.tip = GLOSSARY[v]; cls.push("tip");
+        td.dataset.tip = GLOSSARY[v];
+        if (!opts.cssTip) td.title = GLOSSARY[v];
+        cls.push("tip");
       }
       if (cls.length) td.className = cls.join(" ");
     });
@@ -171,7 +175,7 @@ function renderCompare(runs) {
     runs.forEach((r) => { row[r.label] = r.full_stats[metric] ?? "—"; });
     return row;
   });
-  $("compare-table").replaceChildren(table(cols, rows));
+  $("compare-table").replaceChildren(table(cols, rows, { cssTip: true }));
 }
 
 function renderOOS(runs) {

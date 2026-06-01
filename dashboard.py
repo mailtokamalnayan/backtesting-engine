@@ -228,11 +228,9 @@ def comparison_html(df) -> str:
         for i, c in enumerate(cols):
             val = _html.escape(str(row[c]))
             tip = glossary.help_for(str(row[c])) if i == 0 else None
-            if tip:
-                esc = _html.escape(tip)
-                attr = f' class="tip" title="{esc}" data-tip="{esc}"'
-            else:
-                attr = ""
+            # data-tip only (styled ::after tooltip); no title= so the native
+            # browser bubble doesn't compete with the custom one.
+            attr = f' class="tip" data-tip="{_html.escape(tip)}"' if tip else ""
             cells.append(f"<td{attr}>{val}</td>")
         body.append(f"<tr>{''.join(cells)}</tr>")
     return (f'<table class="cmp"><thead><tr>{head}</tr></thead>'

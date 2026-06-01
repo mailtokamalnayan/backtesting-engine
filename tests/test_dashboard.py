@@ -72,8 +72,10 @@ def test_run_label_prefixes_instrument():
 def test_comparison_html_tooltips_metric_names():
     runs = _runs_frame()
     html = dashboard.comparison_html(dashboard.build_comparison_table(runs, ["b"]))
-    # metric name carries the glossary help as a title= tooltip
-    assert 'title="' in html
+    # metric name carries the glossary help as a data-tip (styled ::after tooltip),
+    # NOT a native title= (which would compete with the custom tooltip).
+    assert 'data-tip="' in html
+    assert 'title="' not in html
     assert "Profit Factor" in html
     assert "<table" in html and 'class="cmp"' in html
 
