@@ -67,6 +67,8 @@ def test_build_comparison_table_side_by_side():
     # Full stat set surfaced, including CAGR and Profit Factor.
     metrics = list(table["Metric"])
     assert "CAGR [%]" in metrics and "Profit Factor" in metrics
+    # "# Trades" relabelled to "Trades" so st.table doesn't render it as an H1.
+    assert "Trades" in metrics and "# Trades" not in metrics
     pf_row = table[table["Metric"] == "Profit Factor"].iloc[0]
     assert pf_row["n=9, hold_days=2"] == "1.76"
 

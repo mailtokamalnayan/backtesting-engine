@@ -129,7 +129,9 @@ def _fmt_stat(key, v):
 
 def build_comparison_table(runs: pd.DataFrame, run_ids) -> pd.DataFrame:
     """Full backtesting.py stats for the selected runs, side by side."""
-    data = {"Metric": list(_FULL_STATS)}
+    # Relabel "# Trades" -> "Trades": st.table renders the Metric cell as markdown,
+    # and a leading '#' becomes an H1 heading.
+    data = {"Metric": ["Trades" if k == "# Trades" else k for k in _FULL_STATS]}
     used = {}
     for rid in run_ids:
         sub = runs[runs["run_id"] == rid]
@@ -303,20 +305,29 @@ if __name__ == "__main__":
     if curves:
         st.line_chart(pd.DataFrame(curves))
 
+    # In-sample / out-of-sample, one table per selected run.
+    st.subheader("Out-of-sample validation")
+    splits = [(p, sub[sub["run_id"] == label_to_id[p]].iloc[0].get("split_json"))
+              for p in picked]
+    if any(isinstance(sj, str) and sj for _, sj in splits):
+        first_split = next(json.loads(sj) for _, sj in splits
+                           if isinstance(sj, str) and sj)
+        st.caption(
+            f"Split at {first_split['split_date']} — in-sample is the first "
+            f"{first_split['fraction'] * 100:.0f}% of the range; out-of-sample is the "
+            f"most-recent {(1 - first_split['fraction']) * 100:.0f}% (unseen). An edge "
+            f"that holds here is far more trustworthy."
+        )
+        for label, sj in splits:
+            if isinstance(sj, str) and sj:
+                if len(picked) > 1:
+                    st.markdown(f"**{label}**")
+                st.table(build_oos_table(json.loads(sj)))
+
+    # Trade list for a single selected run.
     if len(picked_ids) == 1:
         rid = picked_ids[0]
         row = sub[sub["run_id"] == rid].iloc[0]
-        split_json = row.get("split_json")
-        if isinstance(split_json, str) and split_json:
-            split = json.loads(split_json)
-            st.subheader("Out-of-sample validation")
-            st.caption(
-                f"Split at {split['split_date']} — in-sample is the first "
-                f"{split['fraction'] * 100:.0f}% of the range; out-of-sample is the "
-                f"most-recent {(1 - split['fraction']) * 100:.0f}% (unseen). An edge "
-                f"that holds here is far more trustworthy."
-            )
-            st.table(build_oos_table(split))
         try:
             artifacts = persistence.load_run_artifacts(rid)
             st.subheader("Trades")
@@ -330,4 +341,4 @@ if __name__ == "__main__":
         except (KeyError, FileNotFoundError):
             st.warning("Trades for this run are unavailable.")
     else:
-        st.caption("Select a single run to see its out-of-sample split and trades.")
+        st.caption("Select a single run to also see its trade list.")
