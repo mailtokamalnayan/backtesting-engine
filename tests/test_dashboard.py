@@ -58,20 +58,41 @@ def test_build_runs_table_empty():
     assert dashboard.build_runs_table(pd.DataFrame()).empty
 
 
+def test_build_runs_table_has_instrument_column():
+    table = dashboard.build_runs_table(_runs_frame())
+    assert table.columns[0] == "Instrument"   # first column
+    assert table.iloc[0]["Instrument"] == "NIFTY"  # upper-cased
+
+
+def test_run_label_prefixes_instrument():
+    label = dashboard.run_label('{"n": 9, "lot": 65}', "banknifty")
+    assert label == "banknifty · n=9"
+
+
+def test_comparison_html_tooltips_metric_names():
+    runs = _runs_frame()
+    html = dashboard.comparison_html(dashboard.build_comparison_table(runs, ["b"]))
+    # metric name carries the glossary help as a title= tooltip
+    assert 'title="' in html
+    assert "Profit Factor" in html
+    assert "<table" in html and 'class="cmp"' in html
+
+
 def test_build_comparison_table_side_by_side():
     runs = _runs_frame()
     table = dashboard.build_comparison_table(runs, ["b", "a"])
     assert table.columns[0] == "Metric"
-    # Each run is a column, labelled by its varying params.
-    assert "n=9, hold_days=2" in table.columns
-    assert "n=50, hold_days=2" in table.columns
+    # Each run is a column, labelled by instrument + its varying params (instrument
+    # prefix keeps labels unique when indices share params).
+    assert "nifty · n=9, hold_days=2" in table.columns
+    assert "nifty · n=50, hold_days=2" in table.columns
     # Full stat set surfaced, including CAGR and Profit Factor.
     metrics = list(table["Metric"])
     assert "CAGR [%]" in metrics and "Profit Factor" in metrics
     # "# Trades" relabelled to "Trades" so st.table doesn't render it as an H1.
     assert "Trades" in metrics and "# Trades" not in metrics
     pf_row = table[table["Metric"] == "Profit Factor"].iloc[0]
-    assert pf_row["n=9, hold_days=2"] == "1.76"
+    assert pf_row["nifty · n=9, hold_days=2"] == "1.76"
 
 
 def test_build_comparison_table_dedupes_labels():

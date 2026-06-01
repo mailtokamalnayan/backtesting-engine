@@ -11,6 +11,10 @@ parenthetical cue (e.g. "(higher is better)") so the reader knows how to read it
 """
 
 COLUMN_HELP = {
+    "Instrument": "Which index this run traded — Nifty 50, Bank Nifty, or Nifty "
+                  "Midcap Select. Lot size differs per index (Nifty 65, BankNifty 30, "
+                  "Midcap 120 units).",
+
     # --- headline performance metrics (runs table + OOS + full stats) ---
     "CAGR": "Compound Annual Growth Rate — your average return per year, with gains "
             "compounding. (higher is better)",

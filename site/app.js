@@ -189,6 +189,29 @@ function renderTrades(runs) {
 
 const PALETTE = ["#126b62", "#c0392b", "#3b6ea5", "#b07d2b", "#7d5ba6", "#1f7a47"];
 
+// Crosshair: dashed vertical + horizontal lines that follow the cursor, drawn
+// under the (always-on) tooltip. Pure overlay — no effect on the data.
+const crosshair = {
+  id: "crosshair",
+  afterEvent(chart, args) {
+    const e = args.event;
+    if (e.type === "mouseout") { chart._cx = chart._cy = null; }
+    else { chart._cx = args.inChartArea ? e.x : null; chart._cy = args.inChartArea ? e.y : null; }
+    args.changed = true;
+  },
+  afterDatasetsDraw(chart) {
+    if (chart._cx == null) return;
+    const { ctx, chartArea: { top, bottom, left, right } } = chart;
+    ctx.save();
+    ctx.lineWidth = 1; ctx.strokeStyle = "#9aa0a6"; ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(chart._cx, top); ctx.lineTo(chart._cx, bottom);   // vertical
+    ctx.moveTo(left, chart._cy); ctx.lineTo(right, chart._cy);   // horizontal
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
 function renderChart(runs) {
   // Union of dates across selected runs -> aligned datasets (null where missing).
   const dateSet = new Set();
@@ -204,6 +227,7 @@ function renderChart(runs) {
   CHART = new Chart($("equity"), {
     type: "line",
     data: { labels, datasets },
+    plugins: [crosshair],
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
       font: { family: "'IBM Plex Mono', monospace", size: 11 },

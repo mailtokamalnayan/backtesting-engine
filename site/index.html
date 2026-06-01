@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#fbfbf8">
-  <title>Nifty Backtest Results</title>
+  <title>NSE Index Backtest Results</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
 </head>
 <body>
   <header>
-    <h1>Nifty Backtest Results</h1>
+    <h1>NSE Index Backtest Results</h1>
     <div id="meta" class="muted"></div>
   </header>
 
@@ -24,9 +24,10 @@
       <h2 id="strat-title"></h2>
       <div id="strat-source" class="muted"></div>
       <div id="runs-table" class="tablewrap"></div>
-      <p class="hint">CAGR is annualized return on the fixed cash base; for 1-lot
-        futures compare <b>Total PnL</b> and <b>PF / OOS PF</b>. Each row is one
-        parameter variation.</p>
+      <p class="hint">Hover any column header for what it means. CAGR is annualized
+        return on the fixed cash base; <b>Total PnL</b> is per <b>one futures lot</b> of
+        that index (Nifty 65, BankNifty 30, Midcap 120 units/lot). Each row is one
+        instrument &times; parameter variation.</p>
     </section>
 
     <section>

@@ -63,7 +63,8 @@ def build_data() -> dict:
         table = dashboard.build_runs_table(sub)
         entries, used = [], {}
         for _, r in sub.iterrows():
-            base = dashboard.run_label(r["params_json"]) or str(r["run_id"])[:8]
+            base = (dashboard.run_label(r["params_json"], r.get("instrument"))
+                    or str(r["run_id"])[:8])
             used[base] = used.get(base, 0) + 1
             label = base if used[base] == 1 else f"{base} (#{used[base]})"
             entry = _run_entry(r)

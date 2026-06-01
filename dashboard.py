@@ -82,14 +82,29 @@ def _fmt_money(v):
     return "—" if v is None or pd.isna(v) else f"{float(v):,.0f}"
 
 
-def run_label(params_json) -> str:
-    """Short label of the params that vary (skip the constant lot size)."""
+def run_label(params_json, instrument=None) -> str:
+    """Short label of the params that vary (skip the constant lot size).
+
+    When ``instrument`` is given it's prefixed so labels stay unique across
+    instruments that share params (e.g. nifty vs banknifty at n=9).
+    """
     try:
         d = json.loads(params_json)
     except (TypeError, ValueError):
         return ""
     parts = [f"{k}={v}" for k, v in d.items() if k != "lot"]
-    return ", ".join(parts) if parts else "default"
+    body = ", ".join(parts) if parts else "default"
+    return f"{instrument} · {body}" if instrument else body
+
+
+def _group_by_instrument(runs: pd.DataFrame) -> pd.DataFrame:
+    """Order rows by instrument (config order) so a cluster groups by index,
+    preserving each group's existing order (newest-first from list_runs)."""
+    if "instrument" not in runs.columns:
+        return runs
+    order = {name: i for i, name in enumerate(config.INSTRUMENTS)}
+    key = runs["instrument"].map(lambda x: order.get(x, len(order)))
+    return runs.assign(_io=key).sort_values("_io", kind="stable").drop(columns="_io")
 
 
 def _param_keys(runs: pd.DataFrame) -> list:
@@ -116,6 +131,7 @@ def build_runs_table(runs: pd.DataFrame) -> pd.DataFrame:
     """
     if runs.empty:
         return pd.DataFrame()
+    runs = _group_by_instrument(runs)
     pkeys = _param_keys(runs)
     rows = []
     for _, r in runs.iterrows():
@@ -123,7 +139,8 @@ def build_runs_table(runs: pd.DataFrame) -> pd.DataFrame:
         stats = json.loads(r["stats_json"]) if isinstance(r["stats_json"], str) else {}
         final_eq = r["final_equity"]
         pnl = None if pd.isna(final_eq) else final_eq - config.DEFAULT_CASH
-        row = {k: p.get(k, "—") for k in pkeys}
+        row = {"Instrument": str(r.get("instrument", "—")).upper()}
+        row.update({k: p.get(k, "—") for k in pkeys})
         row.update({
             "CAGR": _fmt_pct(r["cagr"]),
             "Return": _fmt_pct(r["return_pct"]),
@@ -137,8 +154,8 @@ def build_runs_table(runs: pd.DataFrame) -> pd.DataFrame:
             "Period": f"{r['start_date']} → {r['end_date']}",
         })
         rows.append(row)
-    cols = pkeys + ["CAGR", "Return", "Total PnL", "Win%", "PF", "OOS PF",
-                    "Max DD", "Sharpe", "Trades", "Period"]
+    cols = ["Instrument"] + pkeys + ["CAGR", "Return", "Total PnL", "Win%", "PF",
+                                     "OOS PF", "Max DD", "Sharpe", "Trades", "Period"]
     return pd.DataFrame(rows, columns=cols)
 
 
@@ -187,11 +204,35 @@ def build_comparison_table(runs: pd.DataFrame, run_ids) -> pd.DataFrame:
             continue
         r = sub.iloc[0]
         stats = json.loads(r["stats_json"]) if isinstance(r["stats_json"], str) else {}
-        base = run_label(r["params_json"]) or str(rid)[:8]
+        base = run_label(r["params_json"], r.get("instrument")) or str(rid)[:8]
         used[base] = used.get(base, 0) + 1
         label = base if used[base] == 1 else f"{base} (#{used[base]})"
         data[label] = [_fmt_stat(k, stats.get(k)) for k in _FULL_STATS]
     return pd.DataFrame(data)
+
+
+def comparison_html(df) -> str:
+    """Comparison table as HTML so each metric name carries a hover tooltip.
+
+    ``st.table``/``st.dataframe`` can't tooltip individual cells, so the Metric
+    column is rendered with ``title=`` help from the shared glossary — matching
+    the static site's hover behaviour.
+    """
+    import html as _html
+
+    cols = list(df.columns)
+    head = "".join(f"<th>{_html.escape(str(c))}</th>" for c in cols)
+    body = []
+    for _, row in df.iterrows():
+        cells = []
+        for i, c in enumerate(cols):
+            val = _html.escape(str(row[c]))
+            tip = glossary.help_for(str(row[c])) if i == 0 else None
+            attr = f' class="tip" title="{_html.escape(tip)}"' if tip else ""
+            cells.append(f"<td{attr}>{val}</td>")
+        body.append(f"<tr>{''.join(cells)}</tr>")
+    return (f'<table class="cmp"><thead><tr>{head}</tr></thead>'
+            f'<tbody>{"".join(body)}</tbody></table>')
 
 
 def build_oos_table(split: dict) -> pd.DataFrame:
@@ -316,6 +357,19 @@ if __name__ == "__main__":
         /* show full param labels in the run multiselect chips (no truncation) */
         [data-baseweb="tag"] { max-width: none !important; }
         [data-baseweb="tag"] span { max-width: none !important; text-overflow: clip !important; }
+        /* HTML comparison table (Full metrics) with per-metric hover tooltips */
+        table.cmp { border-collapse: collapse; width: 100%; font-size: 13px;
+            font-variant-numeric: tabular-nums; }
+        table.cmp th, table.cmp td { padding: 6px 13px; text-align: right;
+            white-space: nowrap; border-bottom: 1px solid #e9e7e1;
+            font-family: 'IBM Plex Mono', monospace; }
+        table.cmp th { text-transform: uppercase; font-size: 11px; letter-spacing: .04em;
+            color: #6c7178; background: #f4f2ec; font-family: 'IBM Plex Sans', sans-serif; }
+        table.cmp th:first-child, table.cmp td:first-child { text-align: left;
+            font-family: 'IBM Plex Sans', sans-serif; font-weight: 500; }
+        table.cmp td.tip { cursor: help;
+            text-decoration: underline dotted #d8d5cd; text-underline-offset: 3px; }
+        table.cmp td.tip:hover { text-decoration-color: #126b62; color: #126b62; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -387,14 +441,15 @@ if __name__ == "__main__":
                  column_config=_column_config(_runs_tbl.columns))
     st.caption(
         "Hover any column header for what it means. CAGR is annualized return on the "
-        "fixed cash base (10M); for 1-lot futures compare **Total PnL** and "
-        "**PF / OOS PF** across rows. Each row is one parameter variation."
+        "fixed cash base (10M); **Total PnL** is per **one futures lot** of that index "
+        "(Nifty 65, BankNifty 30, Midcap 120 units/lot). Compare **Total PnL** and "
+        "**PF / OOS PF** across rows. Each row is one instrument × parameter variation."
     )
 
     # Build unique labels -> run_id for selection.
     label_to_id = {}
     for _, r in sub.iterrows():
-        base = run_label(r["params_json"]) or str(r["run_id"])[:8]
+        base = run_label(r["params_json"], r.get("instrument")) or str(r["run_id"])[:8]
         label, i = base, 2
         while label in label_to_id:
             label, i = f"{base} (#{i})", i + 1
@@ -410,7 +465,9 @@ if __name__ == "__main__":
     picked_ids = [label_to_id[p] for p in picked]
 
     st.subheader("Full metrics (backtesting.py)")
-    st.table(build_comparison_table(sub, picked_ids))
+    st.markdown(comparison_html(build_comparison_table(sub, picked_ids)),
+                unsafe_allow_html=True)
+    st.caption("Hover a metric name for a plain-English description.")
 
     st.subheader("Equity curves (% return from start)")
     import altair as alt
@@ -424,23 +481,38 @@ if __name__ == "__main__":
         frames.append(pd.DataFrame({"Date": s.index, "Return %": s.to_numpy(), "Run": p}))
     if frames:
         cdf = pd.concat(frames, ignore_index=True)
-        chart = (
-            alt.Chart(cdf)
-            .mark_line(strokeWidth=1.5)
-            .encode(
-                x=alt.X("Date:T", title=None),
-                y=alt.Y("Return %:Q", title="% return from start"),
-                # labelLimit large so long param labels never truncate.
-                color=alt.Color("Run:N", title=None,
-                                scale=alt.Scale(range=PALETTE),
-                                legend=alt.Legend(orient="top", labelLimit=1000,
-                                                  symbolType="stroke", columns=1)),
-                tooltip=[alt.Tooltip("Run:N", title="Run"),
-                         alt.Tooltip("Date:T", title="Date"),
-                         alt.Tooltip("Return %:Q", format="+.2f")],
-            )
-            .properties(width="container", height=380)
+        # Crosshair: as the cursor moves, snap to the nearest date and draw a
+        # vertical rule + a horizontal rule at each run's value, with the values
+        # labelled so the readout stays visible the whole time (not only on hover).
+        nearest = alt.selection_point(nearest=True, on="pointermove",
+                                      fields=["Date"], empty=False)
+        base = alt.Chart(cdf).encode(
+            x=alt.X("Date:T", title=None),
+            y=alt.Y("Return %:Q", title="% return from start"),
+            # labelLimit large so long param labels never truncate.
+            color=alt.Color("Run:N", title=None, scale=alt.Scale(range=PALETTE),
+                            legend=alt.Legend(orient="top", labelLimit=1000,
+                                              symbolType="stroke", columns=1)),
         )
+        lines = base.mark_line(strokeWidth=1.5)
+        selectors = base.mark_point(opacity=0).add_params(nearest)
+        vrule = alt.Chart(cdf).mark_rule(color="#9aa0a6", strokeDash=[4, 3]).encode(
+            x="Date:T").transform_filter(nearest)
+        hrule = base.mark_rule(strokeDash=[2, 2], opacity=0.55).encode(
+            y="Return %:Q").transform_filter(nearest)
+        points = base.mark_point(size=55, filled=True).encode(
+            opacity=alt.condition(nearest, alt.value(1), alt.value(0)),
+            tooltip=[alt.Tooltip("Run:N", title="Run"),
+                     alt.Tooltip("Date:T", title="Date"),
+                     alt.Tooltip("Return %:Q", format="+.2f")],
+        )
+        labels = base.mark_text(align="left", dx=7, dy=-7, font="IBM Plex Mono",
+                                fontSize=11).encode(
+            text=alt.condition(nearest, alt.Text("Return %:Q", format="+.2f"),
+                               alt.value(" ")),
+        )
+        chart = alt.layer(lines, selectors, vrule, hrule, points, labels).properties(
+            width="container", height=380)
         st.altair_chart(chart)
 
     # In-sample / out-of-sample, one table per selected run.
@@ -469,10 +541,11 @@ if __name__ == "__main__":
         try:
             artifacts = persistence.load_run_artifacts(rid)
             st.subheader("Trades")
+            _lot = json.loads(row["params_json"]).get("lot", "?")
             st.caption(
                 f"{row['slippage'] * 100:.2f}% slippage applied per fill; commission "
-                f"not modeled. PnL is per the strategy's position size (Nifty futures "
-                f"= 1 lot)."
+                f"not modeled. PnL is per **1 {row['instrument']} futures lot** "
+                f"({_lot} units)."
             )
             _trades_tbl = build_trades_table(artifacts["trades"])
             st.dataframe(_trades_tbl, width="stretch", hide_index=True,
