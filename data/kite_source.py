@@ -1,14 +1,18 @@
 """Zerodha Kite Connect data source — daily and intraday index candles.
 
-Implements the ``DataSource`` seam (R4), adding intraday support via
-``get_intraday``. Auth is two-step and the access token expires daily, so the
-intended pattern is: authenticate once (``python -m data.kite_auth``), then
-download history and cache it to Parquet — backtests run offline from the cache
-forever, so the daily-token expiry never bites.
+Implements the ``DataSource`` seam, adding intraday support via ``get_intraday``.
+Auth is two-step and the access token expires daily (``python -m data.kite_auth``
+writes ``.kite_token.json``).
+
+Caching is **freshness-aware**: closed trading days are immutable, so each
+(symbol, interval) is stored in a single canonical Parquet file under
+``.kite_cache/`` and only the open/trailing window is refetched from the API. The
+result is never stale and disk stays lean (one file per symbol+interval, no
+date-range cruft). Within a single command, an in-memory hold avoids re-reading
+disk or re-refetching across a param sweep.
 
 Credentials come from the environment (never hardcoded):
     KITE_API_KEY, KITE_API_SECRET
-The access token is written by the auth helper to ``.kite_token.json`` (gitignored).
 
 Requires the ``kiteconnect`` package and an active Kite Connect historical-data
 subscription. ``kiteconnect`` is imported lazily so this module loads without it.
@@ -41,6 +45,11 @@ _MAX_DAYS = {
 _OHLC = ["Open", "High", "Low", "Close"]
 
 
+def _today() -> dt.date:
+    """Indirection so tests can pin 'today' for the freshness boundary."""
+    return dt.date.today()
+
+
 def load_access_token() -> dict:
     """Read the token written by data.kite_auth, or raise a clear instruction."""
     if not TOKEN_PATH.exists():
@@ -52,7 +61,7 @@ def load_access_token() -> dict:
 
 
 class KiteIntradaySource(DataSource):
-    """Daily + intraday NSE index candles via Kite Connect.
+    """Daily + intraday NSE index candles via Kite Connect, freshness-aware cache.
 
     Pass ``kite`` to inject a pre-authenticated client (used in tests); otherwise
     a client is built lazily from ``KITE_API_KEY`` + the saved access token.
@@ -62,6 +71,7 @@ class KiteIntradaySource(DataSource):
         self._api_key = api_key or os.environ.get("KITE_API_KEY")
         self._access_token = access_token
         self._kite = kite
+        self._hold = {}  # (symbol, interval) -> canonical frame, per-command reuse
 
     def _client(self):
         if self._kite is not None:
@@ -89,20 +99,41 @@ class KiteIntradaySource(DataSource):
         if interval not in _MAX_DAYS:
             raise DataUnavailableError(f"unsupported interval {interval!r}")
 
-        cache_path = self._cache_path(symbol, interval, start, end)
-        if cache_path.exists():
-            return pd.read_parquet(cache_path)
+        key = (symbol, interval)
+        in_hold = key in self._hold
+        base = self._hold[key] if in_hold else self._read_canonical(symbol, interval)
+        covered = self._covers(base, start, end)
 
-        token = INSTRUMENT_TOKENS[symbol]
-        records = self._fetch_chunked(token, start, end, interval)
-        df = self._to_df(records)
-        if df.empty:
+        # Serve without fetching when the held frame covers it (already refreshed
+        # this command) or the cache covers a fully-closed range.
+        if covered and (in_hold or end < _today()):
+            frame = base
+        else:
+            frame = self._refresh(symbol, interval, base, start, end)
+            self._write_canonical(symbol, interval, frame)
+
+        self._hold[key] = frame
+        sliced = self._slice(frame, start, end)
+        if sliced.empty:
             raise DataUnavailableError(
                 f"no candles for {symbol!r} {start}..{end} @ {interval}"
             )
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(cache_path)
-        return df
+        return sliced
+
+    def _refresh(self, symbol, interval, base, start, end) -> pd.DataFrame:
+        """Fetch only the missing/trailing window and merge into ``base``."""
+        if base.empty or start < base.index.min().date():
+            fetch_from = start            # gap before cache -> refetch the range
+        else:
+            fetch_from = base.index.max().date()  # re-pull last day + forward
+        records = self._fetch_chunked(INSTRUMENT_TOKENS[symbol], fetch_from, end,
+                                      interval)
+        fresh = self._to_df(records)
+        if fresh.empty:
+            return base
+        merged = pd.concat([base, fresh])
+        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        return merged
 
     def _fetch_chunked(self, token, start, end, interval):
         step = dt.timedelta(days=_MAX_DAYS[interval])
@@ -125,6 +156,20 @@ class KiteIntradaySource(DataSource):
         return out
 
     @staticmethod
+    def _covers(base, start, end) -> bool:
+        return (not base.empty
+                and base.index.min().date() <= start
+                and base.index.max().date() >= end)
+
+    @staticmethod
+    def _slice(frame, start, end) -> pd.DataFrame:
+        if frame.empty:
+            return frame
+        lo = pd.Timestamp(start)
+        hi = pd.Timestamp(end) + pd.Timedelta(days=1)  # inclusive of the end day
+        return frame[(frame.index >= lo) & (frame.index < hi)]
+
+    @staticmethod
     def _to_df(records) -> pd.DataFrame:
         if not records:
             return pd.DataFrame(columns=_OHLC)
@@ -141,6 +186,21 @@ class KiteIntradaySource(DataSource):
         return df[~df.index.duplicated(keep="first")]
 
     @staticmethod
-    def _cache_path(symbol, interval, start, end):
+    def _canonical_path(symbol, interval):
         slug = symbol.replace(" ", "_")
-        return CACHE_DIR / f"{slug}_{interval}_{start}_{end}.parquet"
+        return CACHE_DIR / f"{slug}_{interval}.parquet"
+
+    def _read_canonical(self, symbol, interval) -> pd.DataFrame:
+        path = self._canonical_path(symbol, interval)
+        if path.exists():
+            return pd.read_parquet(path)
+        return pd.DataFrame(columns=_OHLC)
+
+    def _write_canonical(self, symbol, interval, frame) -> None:
+        if frame.empty:
+            return
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path = self._canonical_path(symbol, interval)
+        tmp = path.with_suffix(".parquet.tmp")
+        frame.to_parquet(tmp)
+        os.replace(tmp, path)  # atomic — a crash mid-write can't corrupt history
