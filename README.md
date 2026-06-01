@@ -1,12 +1,20 @@
 # Backtesting Engine
 
-A local, single-user harness for backtesting **daily** trading strategies on Indian
-indices (Nifty 50, Nifty Bank). You write a small Python strategy, run it from the
-CLI, and every run is saved. A read-only Streamlit dashboard browses and compares all
-your runs and their variations.
+A local harness for backtesting **daily and intraday** trading strategies on Indian
+indices (Nifty 50, Nifty Bank). You write a small Python strategy, run it (or a whole
+param sweep) from the CLI, and every run is saved. A read-only Streamlit dashboard
+browses and compares all your runs, and a one-command `make publish` exports an
+interactive static site you can host anywhere.
 
-Built on [`backtesting.py`](https://kernc.github.io/backtesting.py/) (engine) and
-[`jugaad-data`](https://github.com/jugaad-py/jugaad-data) (NSE daily index data).
+**Live demo:** https://backtest-in-nf.vercel.app
+
+Built on [`backtesting.py`](https://kernc.github.io/backtesting.py/) (engine),
+[`jugaad-data`](https://github.com/jugaad-py/jugaad-data) (free NSE daily index data),
+and optionally [Zerodha Kite Connect](https://kite.trade/) (paid intraday data).
+
+> **Not financial advice.** This is an educational research tool. Backtested results
+> are illustrative, carry real methodological limits (see the caveats below), and are
+> not a prediction of real-world returns. Do your own due diligence.
 
 ## Setup
 
@@ -14,7 +22,12 @@ Built on [`backtesting.py`](https://kernc.github.io/backtesting.py/) (engine) an
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .          # installs deps from pyproject.toml
 .venv/bin/python -m pip install -e ".[dev]"   # + pytest
+
+cp .env.example .env                          # then fill in any keys you need
 ```
+
+Daily strategies need no credentials. Intraday strategies need Kite Connect keys, and
+publishing needs Vercel — both are configured via `.env` (see `.env.example`).
 
 ## The loop
 
@@ -42,6 +55,19 @@ Cost model: a fixed **slippage** is applied to every fill (`config.DEFAULT_SLIPP
 default 0.5% per fill ≈ 1% round trip). Commission is not modeled separately. Change
 that one constant to tune (e.g. `0.0005` for a futures-like 0.05%).
 
+## Bundled strategies
+
+| Name | Idea | Data |
+|------|------|------|
+| `ema_cross` | Go long/short on fast/slow EMA crossovers (the worked example). | daily |
+| `turn_of_month` | Long the Nth-last trading day of the month, exit early next month. | minute |
+| `turnaround_tuesday` | Buy a weak Monday (15:25 below the daily 9-EMA), exit next session. | minute |
+| `turnaround_tuesday_quantified_version` | The [QuantifiedStrategies](https://www.quantifiedstrategies.com/turnaround-tuesday-strategy/) rules: Monday close ≥1% below Friday, enter at close, exit Tuesday close. | minute |
+| `santa_rally` | Long the 5th-last trading day of December, exit the 2nd trading day of January. | minute |
+
+List them anytime with `.venv/bin/python run.py --help`. The minute strategies need
+Kite Connect (below); `ema_cross` runs on free daily data out of the box.
+
 ## Writing a strategy
 
 Strategies are tiny `backtesting.py` `Strategy` subclasses registered by name. See
@@ -65,10 +91,13 @@ historical-data subscription. Setup:
 
 1. Create a Kite Connect app at https://developers.kite.trade/ with redirect URL
    `http://127.0.0.1`. Enable the historical-data add-on.
-2. Export credentials (never commit them):
+2. Put credentials in `.env` (gitignored — never commit them) and install the extra:
    ```bash
-   export KITE_API_KEY=xxxx
-   export KITE_API_SECRET=yyyy
+   # .env
+   KITE_API_KEY=xxxx
+   KITE_API_SECRET=yyyy
+   ```
+   ```bash
    .venv/bin/python -m pip install -e ".[kite]"
    ```
 3. Authenticate once (token saved to `.kite_token.json`, valid until ~7:30 AM next
@@ -125,13 +154,21 @@ rm -rf .jdata_cache/ .kite_cache/
 ## Project layout
 
 ```
-config.py          # paths, instrument map, defaults; sets J_CACHE_DIR
+config.py          # paths, instrument map, defaults; loads .env; sets J_CACHE_DIR
 data/source.py     # DataSource interface + jugaad daily source
 data/kite_source.py / kite_auth.py  # Kite Connect intraday/daily source + login
-strategies/        # strategy registry + example strategies
+strategies/        # strategy registry + bundled strategies
 engine/runner.py   # run_backtest(): the core run + save callable
 engine/persistence.py  # SQLite run index + per-run artifact files
-run.py             # CLI entry point
+engine/oos.py      # in-sample / out-of-sample split
+run.py             # CLI entry point (single run or param sweep)
 dashboard.py       # Streamlit read-only browser
+export_site.py     # export an interactive static snapshot to site/data.json
+publish.py         # make publish: export -> Vercel deploy -> re-point alias
+site/              # static, hostable results dashboard (vanilla JS + Chart.js)
 results/           # index.sqlite + per-run artifacts (gitignored)
 ```
+
+## License
+
+[MIT](LICENSE) © 2026 Kamal Nayan. Educational research tool — not financial advice.

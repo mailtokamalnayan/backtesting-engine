@@ -17,26 +17,35 @@ without touching the network.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
 
 import export_site
 
-# The existing Vercel project this site lives in (see site/README.md).
-SCOPE = "kamals-projects-ce7b0100"
-ALIAS = "backtest-in-nf.vercel.app"
+# Vercel target, from the environment so anyone can deploy to their own project:
+#   VERCEL_SCOPE — your Vercel team/account slug (omitted if unset)
+#   VERCEL_ALIAS — the clean *.vercel.app alias to re-point (alias step skipped if unset)
+SCOPE = os.environ.get("VERCEL_SCOPE")
+ALIAS = os.environ.get("VERCEL_ALIAS")
 
 
 def deploy_command(site_dir=None):
-    """Non-interactive prod deploy; prints the deployment URL as its sole stdout line."""
+    """Non-interactive prod deploy of the site dir; emits the deployment URL on stdout."""
     site_dir = str(site_dir or export_site.SITE)
-    return ["vercel", "deploy", "--prod", "--yes", "--scope", SCOPE, site_dir]
+    cmd = ["vercel", "deploy", "--prod", "--yes"]
+    if SCOPE:
+        cmd += ["--scope", SCOPE]
+    return cmd + [site_dir]
 
 
 def alias_command(url):
     """Re-point the clean alias at a just-deployed immutable URL."""
-    return ["vercel", "alias", "set", url, ALIAS, "--scope", SCOPE]
+    cmd = ["vercel", "alias", "set", url, ALIAS]
+    if SCOPE:
+        cmd += ["--scope", SCOPE]
+    return cmd
 
 
 def _run(command):
@@ -79,6 +88,10 @@ def publish():
         sys.stderr.write(deploy.stdout)
         return 1
     print(f"deployed: {url}")
+
+    if not ALIAS:
+        print("VERCEL_ALIAS not set — skipping alias step; the deploy URL above is live.")
+        return 0
 
     print(f"re-pointing alias {ALIAS} ...")
     alias = _run(alias_command(url))

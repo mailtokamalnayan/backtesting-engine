@@ -1,7 +1,9 @@
 [project]
 name = "backtesting-engine"
 version = "0.1.0"
-description = "Local, single-user backtesting harness for daily Nifty/BankNifty index strategies"
+description = "Local backtesting harness for Nifty/BankNifty index strategies (daily + intraday)"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = [
     "backtesting==0.6.5",
@@ -9,6 +11,7 @@ dependencies = [
     "pandas",      # not a declared jugaad-data dep; required explicitly
     "pyarrow",     # parquet for saved equity curves
     "streamlit",   # read-only dashboard
+    "python-dotenv",  # load .env for KITE_*/VERCEL_* config
 ]
 
 [project.optional-dependencies]

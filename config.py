@@ -13,6 +13,15 @@ from pathlib import Path
 # All paths resolve relative to the repo root (this file's directory).
 ROOT = Path(__file__).resolve().parent
 
+# Load .env (if present) so KITE_*/VERCEL_* vars are available without manual
+# export. Optional dependency — absence is fine; real env vars still win.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
+
 JDATA_CACHE_DIR = ROOT / ".jdata_cache"
 RESULTS_DIR = ROOT / "results"
 RUNS_DIR = RESULTS_DIR / "runs"

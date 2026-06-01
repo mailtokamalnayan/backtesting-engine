@@ -23,6 +23,13 @@ _DEPLOY_JSON = (
 )
 
 
+@pytest.fixture(autouse=True)
+def vercel_config(monkeypatch):
+    """Pin the env-driven Vercel target so command strings are deterministic."""
+    monkeypatch.setattr(publish, "SCOPE", "test-scope")
+    monkeypatch.setattr(publish, "ALIAS", "test-alias.vercel.app")
+
+
 @pytest.fixture
 def recorder(monkeypatch):
     """Record commands run and export() calls, in order, without touching network."""
@@ -79,6 +86,18 @@ def test_parse_deploy_url_handles_json_and_bare_and_missing():
         "https://foo-xyz.vercel.app\n") == "https://foo-xyz.vercel.app"
     # no URL anywhere -> None (publish() turns this into a clean failure)
     assert publish.parse_deploy_url("nothing useful here") is None
+
+
+def test_no_alias_configured_skips_alias_step(recorder, monkeypatch):
+    monkeypatch.setattr(publish, "ALIAS", None)  # VERCEL_ALIAS unset
+    rc = publish.publish()
+    assert rc == 0
+    kinds = [e[0] for e in recorder]
+    assert kinds == ["export", "run"]  # deploy only, no alias call
+    # with no scope/alias the deploy command is still well-formed
+    monkeypatch.setattr(publish, "SCOPE", None)
+    assert publish.deploy_command() == ["vercel", "deploy", "--prod", "--yes",
+                                        str(export_site.SITE)]
 
 
 def test_deploy_failure_skips_alias_and_surfaces_stderr(monkeypatch, capsys):
