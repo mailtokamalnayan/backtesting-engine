@@ -15,8 +15,17 @@ import os
 import pandas as pd
 
 import config
+import glossary
 import strategies
 from engine import persistence
+
+
+def _column_config(columns):
+    """Per-column header tooltips (st.column_config) from the shared glossary."""
+    import streamlit as st
+
+    return {c: st.column_config.Column(help=glossary.help_for(c))
+            for c in columns if glossary.help_for(c)}
 
 # Shared line palette — kept in sync with site/app.js PALETTE.
 PALETTE = ["#126b62", "#c0392b", "#3b6ea5", "#b07d2b", "#7d5ba6", "#1f7a47"]
@@ -373,11 +382,13 @@ if __name__ == "__main__":
         _src = None
     if _src:
         st.markdown(f"Source: [{_src}]({_src})")
-    st.dataframe(build_runs_table(sub), width="stretch", hide_index=True)
+    _runs_tbl = build_runs_table(sub)
+    st.dataframe(_runs_tbl, width="stretch", hide_index=True,
+                 column_config=_column_config(_runs_tbl.columns))
     st.caption(
-        "CAGR is annualized return on the fixed cash base (10M); for 1-lot futures "
-        "compare **Total PnL** and **PF / OOS PF** across rows. Each row is one "
-        "parameter variation."
+        "Hover any column header for what it means. CAGR is annualized return on the "
+        "fixed cash base (10M); for 1-lot futures compare **Total PnL** and "
+        "**PF / OOS PF** across rows. Each row is one parameter variation."
     )
 
     # Build unique labels -> run_id for selection.
@@ -463,8 +474,9 @@ if __name__ == "__main__":
                 f"not modeled. PnL is per the strategy's position size (Nifty futures "
                 f"= 1 lot)."
             )
-            st.dataframe(build_trades_table(artifacts["trades"]),
-                         width="stretch", hide_index=True)
+            _trades_tbl = build_trades_table(artifacts["trades"])
+            st.dataframe(_trades_tbl, width="stretch", hide_index=True,
+                         column_config=_column_config(_trades_tbl.columns))
         except (KeyError, FileNotFoundError):
             st.warning("Trades for this run are unavailable.")
     else:

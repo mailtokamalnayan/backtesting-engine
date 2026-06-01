@@ -4,12 +4,14 @@ let DATA = null;
 let CURRENT = null;            // current strategy name
 let SELECTED = new Set();      // selected run labels
 let CHART = null;
+let GLOSSARY = {};             // column/metric label -> plain-English help
 
 const $ = (id) => document.getElementById(id);
 
 async function init() {
   const res = await fetch("data.json");
   DATA = await res.json();
+  GLOSSARY = DATA.glossary || {};
   $("meta").textContent = `Generated ${DATA.generated_at}`;
   const names = Object.keys(DATA.strategies);
   renderTabs(names);
@@ -77,13 +79,15 @@ function table(columns, rows) {
   columns.forEach((c) => {
     const th = document.createElement("th");
     th.textContent = c;
-    if (rightCol[c]) th.className = "num";
+    const cls = rightCol[c] ? ["num"] : [];
+    if (GLOSSARY[c]) { th.title = GLOSSARY[c]; cls.push("tip"); }  // hover help
+    if (cls.length) th.className = cls.join(" ");
     htr.appendChild(th);
   });
   const tb = t.createTBody();
   rows.forEach((row) => {
     const tr = tb.insertRow();
-    columns.forEach((c) => {
+    columns.forEach((c, ci) => {
       const td = tr.insertCell();
       const v = row[c];
       td.textContent = (v === undefined || v === null) ? "—" : v;
@@ -92,6 +96,8 @@ function table(columns, rows) {
       if (isNumericVal(v)) cls.push("figure");
       const col = colorClass(v);
       if (col) cls.push(col);
+      // First column is a row label (e.g. a metric name): give it the same hover help.
+      if (ci === 0 && GLOSSARY[v]) { td.title = GLOSSARY[v]; cls.push("tip"); }
       if (cls.length) td.className = cls.join(" ");
     });
   });

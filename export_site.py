@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 
 import dashboard
+import glossary
 import strategies
 from engine import persistence
 
@@ -81,6 +82,7 @@ def build_data() -> dict:
     return {
         "generated_at": dt.date.today().isoformat(),
         "stat_labels": STAT_LABELS,
+        "glossary": glossary.COLUMN_HELP,  # column/metric hover help
         "strategies": strategies_out,
     }
 

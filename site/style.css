@@ -93,6 +93,14 @@ td.pos { color: var(--pos); }
 /* the leading "Metric"/label column reads as a quiet row header */
 tbody td:first-child:not(.num) { color: var(--ink); font-weight: 500; }
 
+/* columns/metrics with hover help: subtle dotted underline + help cursor */
+th.tip, td.tip {
+  cursor: help;
+  text-decoration: underline dotted var(--line-strong);
+  text-underline-offset: 3px;
+}
+th.tip:hover, td.tip:hover { text-decoration-color: var(--accent); color: var(--accent); }
+
 /* --- run picker --- */
 .picker { display: flex; flex-wrap: wrap; gap: 7px 9px; }
 .chk {
