@@ -1,6 +1,6 @@
 """CLI entry point: trigger a backtest and save it.
 
-    python run.py turnaround_tuesday_intraday --instrument nifty \
+    python run.py turnaround_tuesday --instrument nifty \
         --start 2022-01-01
 
 Every invocation saves a new run. Strategy params (e.g. --n1, --lot) are discovered

@@ -282,7 +282,7 @@ if __name__ == "__main__":
     if runs.empty:
         st.info(
             "No runs yet. Run e.g.\n\n"
-            "`python run.py turnaround_tuesday_intraday --instrument nifty "
+            "`python run.py turnaround_tuesday --instrument nifty "
             "--start 2015-01-01`\n\n"
             "to record your first backtest."
         )

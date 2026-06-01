@@ -15,7 +15,7 @@ pytestmark = pytest.mark.usefixtures("isolated_store")
 
 def _runs_frame():
     return pd.DataFrame([
-        {"run_id": "b", "strategy": "turnaround_tuesday_intraday",
+        {"run_id": "b", "strategy": "turnaround_tuesday",
          "instrument": "nifty", "params_json": '{"n": 9, "lot": 65, "hold_days": 2}',
          "start_date": "2015-01-01", "end_date": "2026-05-30",
          "cagr": 0.31, "return_pct": 2.4, "max_drawdown": -1.2, "win_rate": 56.5,
@@ -23,7 +23,7 @@ def _runs_frame():
          "stats_json": '{"Profit Factor": 1.76, "CAGR [%]": 0.31, "# Trades": 232}',
          "split_json": '{"out_sample": {"profit_factor": 1.05}}',
          "created_at": "2026-05-30T10:01:00"},
-        {"run_id": "a", "strategy": "turnaround_tuesday_intraday",
+        {"run_id": "a", "strategy": "turnaround_tuesday",
          "instrument": "nifty", "params_json": '{"n": 50, "lot": 65, "hold_days": 2}',
          "start_date": "2015-01-01", "end_date": "2026-05-30",
          "cagr": 0.30, "return_pct": 2.0, "max_drawdown": -0.6, "win_rate": 56.8,

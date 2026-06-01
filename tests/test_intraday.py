@@ -10,7 +10,7 @@ from backtesting import Backtest
 import strategies
 from data.source import DataSource
 from engine.runner import run_backtest
-from strategies.turnaround_tuesday_intraday import TurnaroundTuesdayIntraday
+from strategies.turnaround_tuesday import TurnaroundTuesday
 
 pytestmark = pytest.mark.usefixtures("isolated_store")
 
@@ -44,14 +44,14 @@ class _FixedIntraday(DataSource):
 
 
 def test_intraday_strategy_registered_interval_and_fill():
-    entry = strategies.get("turnaround_tuesday_intraday")
+    entry = strategies.get("turnaround_tuesday")
     assert entry.interval == "minute"
     assert entry.trade_on_close is True
 
 
 def test_enters_1525_monday_exits_0945_next_session():
     data = _intraday_declining()
-    bt = Backtest(data, TurnaroundTuesdayIntraday, cash=100_000, commission=0.0,
+    bt = Backtest(data, TurnaroundTuesday, cash=100_000, commission=0.0,
                   exclusive_orders=True, finalize_trades=True, trade_on_close=True)
     stats = bt.run()
     trades = stats["_trades"]
@@ -65,7 +65,7 @@ def test_enters_1525_monday_exits_0945_next_session():
 
 def test_hold_days_2_exits_two_sessions_later():
     data = _intraday_declining()
-    bt = Backtest(data, TurnaroundTuesdayIntraday, cash=1_000_000, commission=0.0,
+    bt = Backtest(data, TurnaroundTuesday, cash=1_000_000, commission=0.0,
                   exclusive_orders=True, finalize_trades=True, trade_on_close=True)
     stats = bt.run(hold_days=2, exit_time="09:15")  # Wednesday-style exit
     trades = stats["_trades"]
@@ -79,7 +79,7 @@ def test_hold_days_2_exits_two_sessions_later():
 
 def test_runner_routes_intraday_through_get_intraday():
     src = _FixedIntraday(_intraday_declining())
-    run_id = run_backtest("turnaround_tuesday_intraday", "nifty",
+    run_id = run_backtest("turnaround_tuesday", "nifty",
                           dt.date(2022, 1, 1), dt.date(2022, 3, 31),
                           slippage=0.0005, source=src)
     assert run_id is not None
@@ -91,6 +91,6 @@ def test_intraday_strategy_on_daily_only_source_raises():
             return _intraday_declining()
 
     with pytest.raises(ValueError, match="needs minute data"):
-        run_backtest("turnaround_tuesday_intraday", "nifty",
+        run_backtest("turnaround_tuesday", "nifty",
                      dt.date(2022, 1, 1), dt.date(2022, 3, 31),
                      source=_DailyOnly())

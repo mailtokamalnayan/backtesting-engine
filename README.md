@@ -75,11 +75,11 @@ historical-data subscription. Setup:
    from data.kite_source import KiteIntradaySource
    from engine.runner import run_backtest
    import datetime as dt
-   run_backtest("turnaround_tuesday_intraday", "nifty",
+   run_backtest("turnaround_tuesday", "nifty",
                 dt.date(2022,1,1), source=KiteIntradaySource())  # end defaults to today
    ```
 
-`turnaround_tuesday_intraday` trades **one Nifty futures lot** (`lot` units, default
+`turnaround_tuesday` trades **one Nifty futures lot** (`lot` units, default
 65): on a weak Monday (price at 15:25 below the daily 9-EMA) it buys 1 lot at 15:25
 and sells at 09:45 the next session unconditionally. Trade PnL is the rupee P&L of one
 futures contract (points × lot), net of slippage.
@@ -91,7 +91,7 @@ This harness is a fast idea-explorer, not a promise of real-world returns. It do
 
 - **Index price as a futures proxy.** Backtests run on the index *level* series, used
   as a stand-in for the **futures** price. Strategies that trade futures (e.g.
-  `turnaround_tuesday_intraday`) size in lots so PnL is per-contract rupees, and a
+  `turnaround_tuesday`) size in lots so PnL is per-contract rupees, and a
   fixed slippage is applied per fill. But the index level is **not** the futures price:
   futures **roll cost, basis, and expiry** are not modeled. Treat PnL as an
   approximation, not an executable statement.
