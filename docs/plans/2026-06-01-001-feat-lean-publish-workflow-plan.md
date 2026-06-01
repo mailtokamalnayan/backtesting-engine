@@ -1,7 +1,7 @@
 ---
 title: "feat: Lean backtest → publish workflow (freshness-aware cache)"
 type: feat
-status: active
+status: completed
 date: 2026-06-01
 deepened: 2026-06-01
 ---
