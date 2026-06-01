@@ -30,6 +30,26 @@ function renderTabs(names) {
   });
 }
 
+const INSTRUMENT_ORDER = ["nifty", "banknifty", "midcap"];
+
+function runInstrument(r) {
+  return r.instrument || (r.label.includes(" · ") ? r.label.split(" · ")[0] : "");
+}
+
+// Best run (highest CAGR) per instrument, ordered nifty -> banknifty -> midcap.
+function bestPerInstrument(runs) {
+  const best = {};
+  runs.forEach((r) => {
+    const inst = runInstrument(r);
+    const cagr = parseFloat(String(r.full_stats["CAGR [%]"]).replace("%", ""));
+    const val = Number.isFinite(cagr) ? cagr : -Infinity;
+    if (!(inst in best) || val > best[inst].val) best[inst] = { label: r.label, val };
+  });
+  return Object.keys(best)
+    .sort((a, b) => INSTRUMENT_ORDER.indexOf(a) - INSTRUMENT_ORDER.indexOf(b))
+    .map((inst) => best[inst].label);
+}
+
 function selectStrategy(name) {
   CURRENT = name;
   document.querySelectorAll(".tab").forEach((t) =>
@@ -43,9 +63,9 @@ function selectStrategy(name) {
     src.textContent = "";
   }
   renderRunsTable();
-  // default-select the first two runs
-  const labels = DATA.strategies[name].runs.map((r) => r.label);
-  SELECTED = new Set(labels.slice(0, 2));
+  // default-select the best run (by CAGR) for each instrument, so all three
+  // indices show on the chart instead of just the two most-recent runs.
+  SELECTED = new Set(bestPerInstrument(DATA.strategies[name].runs));
   renderPicker();
   renderSelection();
 }

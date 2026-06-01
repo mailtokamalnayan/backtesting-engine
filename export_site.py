@@ -47,6 +47,7 @@ def _run_entry(r):
     ))
     return {
         "run_id": r["run_id"],
+        "instrument": r.get("instrument"),
         "params": json.loads(r["params_json"]),
         "full_stats": full_stats,
         "oos": dashboard.build_oos_table(split).to_dict("records") if split else [],

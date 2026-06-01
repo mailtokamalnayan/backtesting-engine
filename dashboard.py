@@ -455,9 +455,19 @@ if __name__ == "__main__":
             label, i = f"{base} (#{i})", i + 1
         label_to_id[label] = r["run_id"]
 
+    # Default selection: the best run (highest CAGR) per instrument, in config
+    # order — so the chart shows Nifty / BankNifty / Midcap, not just the newest two.
+    id_to_label = {v: k for k, v in label_to_id.items()}
+    default_picks = []
+    for _inst in config.INSTRUMENTS:
+        _inst_runs = sub[sub["instrument"] == _inst]
+        if not _inst_runs.empty:
+            _best = _inst_runs.sort_values("cagr", ascending=False).iloc[0]["run_id"]
+            if _best in id_to_label:
+                default_picks.append(id_to_label[_best])
     picked = st.multiselect(
         "Select run(s) to compare / inspect",
-        list(label_to_id), default=list(label_to_id)[:2],
+        list(label_to_id), default=default_picks or list(label_to_id)[:2],
     )
     if not picked:
         st.info("Select one or more runs above.")
