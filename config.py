@@ -40,6 +40,7 @@ RUNS_DIR.mkdir(parents=True, exist_ok=True)
 INSTRUMENTS = {
     "nifty": "NIFTY 50",
     "banknifty": "NIFTY BANK",
+    "midcap": "NIFTY MIDCAP SELECT",
 }
 
 # backtesting.py does not support fractional shares: if cash < price, buy()

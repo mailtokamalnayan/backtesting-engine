@@ -34,6 +34,7 @@ CACHE_DIR = config.ROOT / ".kite_cache"
 INSTRUMENT_TOKENS = {
     "NIFTY 50": 256265,
     "NIFTY BANK": 260105,
+    "NIFTY MIDCAP SELECT": 288009,  # MIDCPNIFTY F&O index
 }
 
 # Max days Kite serves per request, by interval (chunk longer ranges).
