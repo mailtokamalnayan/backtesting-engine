@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nifty Backtest Results</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Nifty Backtest Results</h1>
+    <div id="meta" class="muted"></div>
+  </header>
+
+  <nav id="strategies" class="tabs"></nav>
+
+  <main>
+    <section>
+      <h2 id="strat-title"></h2>
+      <div id="runs-table" class="tablewrap"></div>
+      <p class="hint">CAGR is annualized return on the fixed cash base; for 1-lot
+        futures compare <b>Total PnL</b> and <b>PF / OOS PF</b>. Each row is one
+        parameter variation.</p>
+    </section>
+
+    <section>
+      <h3>Select runs to compare</h3>
+      <div id="run-picker" class="picker"></div>
+    </section>
+
+    <section>
+      <h3>Equity curves <span class="muted">(% return from start)</span></h3>
+      <div class="chartwrap"><canvas id="equity"></canvas></div>
+    </section>
+
+    <section>
+      <h3>Full metrics <span class="muted">(backtesting.py)</span></h3>
+      <div id="compare-table" class="tablewrap"></div>
+    </section>
+
+    <section id="oos-section">
+      <h3>Out-of-sample validation</h3>
+      <p class="hint" id="oos-caption"></p>
+      <div id="oos"></div>
+    </section>
+
+    <section id="trades-section">
+      <h3>Trades</h3>
+      <p class="hint" id="trades-caption"></p>
+      <div id="trades" class="tablewrap"></div>
+    </section>
+  </main>
+
+  <footer class="muted">
+    Static snapshot · results are read-only · spot index used as a futures proxy
+    (see repo for methodological caveats).
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
