@@ -8,15 +8,51 @@ see their full backtesting.py stats side by side and their equity curves overlai
 Logic lives in small pure helpers (unit-tested); the Streamlit shell only wires them.
 """
 
+import datetime
 import json
+import os
 
 import pandas as pd
 
 import config
+import strategies
 from engine import persistence
 
 # Shared line palette — kept in sync with site/app.js PALETTE.
 PALETTE = ["#126b62", "#c0392b", "#3b6ea5", "#b07d2b", "#7d5ba6", "#1f7a47"]
+
+
+def _env_value(key):
+    """Read a credential from the environment, falling back to a local .env file."""
+    if os.environ.get(key):
+        return os.environ[key]
+    env_file = config.ROOT / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if line.startswith(key + "="):
+                return line.split("=", 1)[1].strip()
+    return None
+
+
+def kite_auth_status() -> dict:
+    """Whether a Kite access token is present and valid for today (local login).
+
+    Returns ``authed`` plus the ``api_key`` and ``login_url`` needed to log in.
+    """
+    from data.kite_source import TOKEN_PATH
+
+    authed = False
+    if TOKEN_PATH.exists():
+        try:
+            tok = json.loads(TOKEN_PATH.read_text())
+            authed = tok.get("generated_on") == datetime.date.today().isoformat()
+        except (ValueError, OSError):
+            authed = False
+    api_key = _env_value("KITE_API_KEY")
+    login_url = (f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3"
+                 if api_key else None)
+    return {"authed": authed, "name": "Kamal", "api_key": api_key,
+            "login_url": login_url}
 
 
 # --- formatters -------------------------------------------------------------
@@ -275,7 +311,45 @@ if __name__ == "__main__":
         """,
         unsafe_allow_html=True,
     )
-    st.title("Backtests")
+    # Header: title + Kite login status (local only). "Hi Kamal" when a token is
+    # available, otherwise a login link + a box to paste the request_token.
+    head_l, head_r = st.columns([5, 3])
+    head_l.title("Backtests")
+    with head_r:
+        _auth = kite_auth_status()
+        if _auth["authed"]:
+            st.markdown(
+                "<div style='text-align:right;padding-top:26px'>Hi "
+                f"<b>{_auth['name']}</b> &nbsp;<span style='color:#1a7a47'>●</span> "
+                "<span style='color:#6c7178'>Kite connected</span></div>",
+                unsafe_allow_html=True,
+            )
+        elif _auth["login_url"]:
+            st.markdown(
+                "<div style='text-align:right;padding-top:8px'>"
+                f"<a href='{_auth['login_url']}' target='_blank'>🔑 Log in to Kite</a>"
+                "</div>", unsafe_allow_html=True,
+            )
+            _rt = st.text_input("request_token", label_visibility="collapsed",
+                                placeholder="paste request_token after login")
+            if st.button("Connect", use_container_width=True) and _rt:
+                try:
+                    from kiteconnect import KiteConnect
+                    from data.kite_source import TOKEN_PATH
+
+                    _kite = KiteConnect(api_key=_auth["api_key"])
+                    _data = _kite.generate_session(
+                        _rt.strip(), api_secret=_env_value("KITE_API_SECRET"))
+                    TOKEN_PATH.write_text(json.dumps({
+                        "access_token": _data["access_token"],
+                        "user_id": _data.get("user_id"),
+                        "generated_on": datetime.date.today().isoformat(),
+                    }, indent=2))
+                    st.rerun()
+                except Exception as err:  # surface auth failures to the user
+                    st.error(f"Login failed: {err}")
+        else:
+            st.caption("Set KITE_API_KEY (env or .env) to enable Kite login.")
 
     runs = persistence.list_runs()  # newest first
 
@@ -293,6 +367,12 @@ if __name__ == "__main__":
     sub = runs[runs["strategy"] == strategy].reset_index(drop=True)
 
     st.subheader(f"{strategy} — {len(sub)} run(s)")
+    try:
+        _src = strategies.get(strategy).source
+    except KeyError:
+        _src = None
+    if _src:
+        st.markdown(f"Source: [{_src}]({_src})")
     st.dataframe(build_runs_table(sub), width="stretch", hide_index=True)
     st.caption(
         "CAGR is annualized return on the fixed cash base (10M); for 1-lot futures "

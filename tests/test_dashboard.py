@@ -1,6 +1,7 @@
 """Dashboard pure helpers (Streamlit shell verified manually)."""
 
 import datetime as dt
+import json
 
 import pandas as pd
 import pytest
@@ -100,6 +101,33 @@ def test_load_equity_series_roundtrip(synthetic_ohlc):
 def test_load_equity_series_unknown_run_raises():
     with pytest.raises(KeyError):
         dashboard.load_equity_series("does_not_exist")
+
+
+def test_kite_auth_status_unauthed(monkeypatch, tmp_path):
+    import data.kite_source as ksrc
+
+    monkeypatch.setattr(ksrc, "TOKEN_PATH", tmp_path / "nope.json")
+    monkeypatch.delenv("KITE_API_KEY", raising=False)
+    status = dashboard.kite_auth_status()
+    assert status["authed"] is False
+    assert status["api_key"] is None
+    assert status["login_url"] is None
+
+
+def test_kite_auth_status_authed_today(monkeypatch, tmp_path):
+    import datetime
+    import data.kite_source as ksrc
+
+    tok = tmp_path / "tok.json"
+    tok.write_text(json.dumps({"access_token": "x",
+                               "generated_on": datetime.date.today().isoformat()}))
+    monkeypatch.setattr(ksrc, "TOKEN_PATH", tok)
+    monkeypatch.setenv("KITE_API_KEY", "apikey123")
+    status = dashboard.kite_auth_status()
+    assert status["authed"] is True
+    assert status["api_key"] == "apikey123"
+    assert "apikey123" in status["login_url"]
+    assert status["name"] == "Kamal"
 
 
 def test_downsample_equity_shrinks_large_minute_curve():

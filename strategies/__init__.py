@@ -12,7 +12,9 @@ populates the registry.
 from collections import namedtuple
 from dataclasses import dataclass, field
 
-Registered = namedtuple("Registered", ["cls", "spec", "trade_on_close", "interval"])
+Registered = namedtuple(
+    "Registered", ["cls", "spec", "trade_on_close", "interval", "source"]
+)
 
 
 @dataclass
@@ -32,7 +34,8 @@ class ParamSpec:
 STRATEGIES = {}
 
 
-def register(name, cls, spec: ParamSpec, trade_on_close=False, interval="day"):
+def register(name, cls, spec: ParamSpec, trade_on_close=False, interval="day",
+             source=None):
     """Register a strategy.
 
     ``trade_on_close`` is a property of the strategy's logic, not a free runner
@@ -43,8 +46,11 @@ def register(name, cls, spec: ParamSpec, trade_on_close=False, interval="day"):
     The runner fetches data at this interval; an intraday strategy run against a
     daily-only source fails clearly. Both fields are fixed per strategy, so they
     don't widen a run's identity.
+
+    ``source`` is an optional URL crediting where the strategy idea came from;
+    the dashboards surface it as a link under the strategy.
     """
-    STRATEGIES[name] = Registered(cls, spec, trade_on_close, interval)
+    STRATEGIES[name] = Registered(cls, spec, trade_on_close, interval, source)
 
 
 def get(name) -> Registered:
@@ -63,4 +69,5 @@ def available():
 # so `register`/`ParamSpec` are defined before the modules import them.
 from . import ema_cross  # noqa: E402,F401
 from . import turnaround_tuesday  # noqa: E402,F401
+from . import turnaround_tuesday_quantified  # noqa: E402,F401
 from . import turn_of_month  # noqa: E402,F401

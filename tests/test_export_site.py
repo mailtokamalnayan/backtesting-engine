@@ -34,6 +34,7 @@ def test_export_builds_valid_bundle(synthetic_ohlc, monkeypatch, tmp_path):
 
     assert "ema_cross" in data["strategies"]
     strat = data["strategies"]["ema_cross"]
+    assert "source" in strat  # source URL field present (None for ema_cross)
     assert strat["columns"] and strat["rows"]
     run = strat["runs"][0]
     for key in ("label", "params", "full_stats", "oos", "equity", "trades"):

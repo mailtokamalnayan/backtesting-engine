@@ -32,7 +32,14 @@ function selectStrategy(name) {
   CURRENT = name;
   document.querySelectorAll(".tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.name === name));
-  $("strat-title").textContent = `${name} — ${DATA.strategies[name].runs.length} run(s)`;
+  const strat = DATA.strategies[name];
+  $("strat-title").textContent = `${name} — ${strat.runs.length} run(s)`;
+  const src = $("strat-source");
+  if (strat.source) {
+    src.innerHTML = `Source: <a href="${strat.source}" target="_blank" rel="noopener">${strat.source}</a>`;
+  } else {
+    src.textContent = "";
+  }
   renderRunsTable();
   // default-select the first two runs
   const labels = DATA.strategies[name].runs.map((r) => r.label);

@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 
 import dashboard
+import strategies
 from engine import persistence
 
 SITE = Path(__file__).resolve().parent / "site"
@@ -55,7 +56,7 @@ def _run_entry(r):
 
 def build_data() -> dict:
     runs = persistence.list_runs()
-    strategies = {}
+    strategies_out = {}
     for strat in sorted(runs["strategy"].unique()):
         sub = runs[runs["strategy"] == strat].reset_index(drop=True)
         table = dashboard.build_runs_table(sub)
@@ -67,7 +68,12 @@ def build_data() -> dict:
             entry = _run_entry(r)
             entry["label"] = label
             entries.append(entry)
-        strategies[strat] = {
+        try:
+            source = strategies.get(strat).source
+        except KeyError:
+            source = None
+        strategies_out[strat] = {
+            "source": source,
             "columns": list(table.columns),
             "rows": table.to_dict("records"),
             "runs": entries,
@@ -75,7 +81,7 @@ def build_data() -> dict:
     return {
         "generated_at": dt.date.today().isoformat(),
         "stat_labels": STAT_LABELS,
-        "strategies": strategies,
+        "strategies": strategies_out,
     }
 
 
