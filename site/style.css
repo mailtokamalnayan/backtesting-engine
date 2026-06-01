@@ -101,6 +101,19 @@ th.tip, td.tip {
 }
 th.tip:hover, td.tip:hover { text-decoration-color: var(--accent); color: var(--accent); }
 
+/* Instant, styled tooltip for metric names in the Full-metrics table (the native
+   title= is slow + subtle). overflow:visible so the popover isn't clipped. */
+#compare-table { overflow: visible; }
+#compare-table td.tip { position: relative; }
+#compare-table td.tip:hover::after {
+  content: attr(data-tip);
+  position: absolute; left: 0; top: 100%; margin-top: 4px; z-index: 50;
+  width: max-content; max-width: 340px; white-space: normal;
+  text-transform: none; letter-spacing: 0;
+  font: 400 12px/1.45 var(--sans); color: #fff; background: var(--ink);
+  padding: 8px 11px; border-radius: 6px; box-shadow: 0 6px 18px rgba(28,32,36,.2);
+}
+
 /* --- run picker --- */
 .picker { display: flex; flex-wrap: wrap; gap: 7px 9px; }
 .chk {

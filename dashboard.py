@@ -228,7 +228,11 @@ def comparison_html(df) -> str:
         for i, c in enumerate(cols):
             val = _html.escape(str(row[c]))
             tip = glossary.help_for(str(row[c])) if i == 0 else None
-            attr = f' class="tip" title="{_html.escape(tip)}"' if tip else ""
+            if tip:
+                esc = _html.escape(tip)
+                attr = f' class="tip" title="{esc}" data-tip="{esc}"'
+            else:
+                attr = ""
             cells.append(f"<td{attr}>{val}</td>")
         body.append(f"<tr>{''.join(cells)}</tr>")
     return (f'<table class="cmp"><thead><tr>{head}</tr></thead>'
@@ -367,9 +371,17 @@ if __name__ == "__main__":
             color: #6c7178; background: #f4f2ec; font-family: 'IBM Plex Sans', sans-serif; }
         table.cmp th:first-child, table.cmp td:first-child { text-align: left;
             font-family: 'IBM Plex Sans', sans-serif; font-weight: 500; }
-        table.cmp td.tip { cursor: help;
+        table.cmp td.tip { cursor: help; position: relative;
             text-decoration: underline dotted #d8d5cd; text-underline-offset: 3px; }
         table.cmp td.tip:hover { text-decoration-color: #126b62; color: #126b62; }
+        /* instant, styled tooltip (the native title= is slow + subtle) */
+        table.cmp td.tip:hover::after {
+            content: attr(data-tip); position: absolute; left: 0; top: 100%;
+            z-index: 50; margin-top: 4px; width: max-content; max-width: 340px;
+            white-space: normal; text-transform: none; letter-spacing: 0;
+            font: 400 12px/1.45 'IBM Plex Sans', sans-serif; color: #fff;
+            background: #1c2024; padding: 8px 11px; border-radius: 6px;
+            box-shadow: 0 6px 18px rgba(0,0,0,.2); }
         </style>
         """,
         unsafe_allow_html=True,

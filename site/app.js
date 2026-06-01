@@ -117,7 +117,9 @@ function table(columns, rows) {
       const col = colorClass(v);
       if (col) cls.push(col);
       // First column is a row label (e.g. a metric name): give it the same hover help.
-      if (ci === 0 && GLOSSARY[v]) { td.title = GLOSSARY[v]; cls.push("tip"); }
+      if (ci === 0 && GLOSSARY[v]) {
+        td.title = GLOSSARY[v]; td.dataset.tip = GLOSSARY[v]; cls.push("tip");
+      }
       if (cls.length) td.className = cls.join(" ");
     });
   });
